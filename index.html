@@ -1,0 +1,946 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="CBT NUSANTARA">
+<meta name="theme-color" content="#0F172A">
+<title>CBT NUSANTARA</title>
+<link rel="icon" type="image/png" href="logo.png">
+<link rel="apple-touch-icon" href="logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: {
+    fontFamily: { sans: ['"Plus Jakarta Sans"', 'Inter', 'system-ui', 'sans-serif'] },
+    colors: { ink: '#0F172A', brand: '#4F46E5', ok: '#10B981', bad: '#EF4444' }
+  } } };
+</script>
+<script src="https://cdn.jsdelivr.net/npm/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+<style>
+  :root { color-scheme: dark; }
+  html, body { height: 100%; }
+  body { background: #0F172A; color: #E2E8F0; font-family: 'Plus Jakarta Sans', Inter, system-ui, sans-serif; overflow-x: hidden;
+         padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+  /* latar: grid halus + dua cahaya yang bergeser pelan */
+  .bg-scene {
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      overflow: hidden;
+      background-image:
+        linear-gradient(135deg, rgba(37, 99, 235, .65) 100%, rgba(79, 70, 229, .45) 100%, rgba(15, 23, 42, .85) 100%),
+        url('bg.jpeg');
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+    }
+  .bg-scene::before, .bg-scene::after { content: ''; position: absolute; width: 46vmax; height: 46vmax; border-radius: 50%; filter: blur(110px); opacity: .28; }
+  .bg-scene::before { background: #4F46E5; top: -18vmax; left: -12vmax; animation: drift 22s ease-in-out infinite alternate; }
+  .bg-scene::after { background: #10B981; bottom: -24vmax; right: -14vmax; opacity: .16; animation: drift 28s ease-in-out infinite alternate-reverse; }
+  @keyframes drift { to { transform: translate(8vmax, 6vmax) scale(1.12); } }
+
+  .glass { background: rgba(30,41,59,.55); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid rgba(148,163,184,.16); }
+  .panel { background: rgba(15,23,42,.72); border: 1px solid rgba(148,163,184,.16); border-radius: 18px; }
+
+  /* kartu gerbang: miring 3D + pendar mengikuti kursor */
+  .tilt { position: relative; transform: perspective(900px) rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg)); transition: transform .18s ease-out, border-color .2s; will-change: transform; }
+  .tilt::before { content: ''; position: absolute; inset: -1px; border-radius: inherit; pointer-events: none; opacity: 0; transition: opacity .25s;
+    background: radial-gradient(380px circle at var(--mx,50%) var(--my,50%), var(--glow, rgba(79,70,229,.55)), transparent 62%);
+    -webkit-mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0); mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0); padding: 2px; }
+  .tilt:hover::before { opacity: 1; }
+  .tilt:hover { box-shadow: 0 24px 60px -24px var(--glow, rgba(79,70,229,.6)); }
+
+  .btn { position: relative; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; gap: .5rem; font-weight: 600; border-radius: 12px;
+         padding: .7rem 1.1rem; transition: transform .12s, background .2s, opacity .2s, box-shadow .2s; cursor: pointer; user-select: none; }
+  .btn:active { transform: scale(.98); }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .btn-primary { background: #4F46E5; color: #fff; } .btn-primary:hover:not(:disabled) { background: #5B54F0; box-shadow: 0 8px 24px -8px rgba(79,70,229,.8); }
+  .btn-ok { background: #10B981; color: #04241a; } .btn-ok:hover:not(:disabled) { background: #22C795; }
+  .btn-danger { background: #EF4444; color: #fff; } .btn-danger:hover:not(:disabled) { background: #F25C5C; }
+  .btn-ghost { background: rgba(148,163,184,.1); color: #E2E8F0; border: 1px solid rgba(148,163,184,.2); } .btn-ghost:hover:not(:disabled) { background: rgba(148,163,184,.18); }
+  .btn-sm { padding: .4rem .7rem; border-radius: 9px; font-size: .8rem; }
+  .ripple { position: absolute; border-radius: 50%; background: rgba(255,255,255,.35); transform: scale(0); animation: rip .6s ease-out forwards; pointer-events: none; }
+  @keyframes rip { to { transform: scale(2.6); opacity: 0; } }
+
+  .input { width: 100%; background: rgba(15,23,42,.8); border: 1px solid rgba(148,163,184,.25); border-radius: 12px; padding: .72rem .9rem; color: #F1F5F9; outline: none; transition: border-color .2s, box-shadow .2s; }
+  .input:focus { border-color: #4F46E5; box-shadow: 0 0 0 3px rgba(79,70,229,.3); }
+  .input[readonly] { opacity: .65; }
+  .lbl { display: block; font-size: .8rem; font-weight: 600; color: #94A3B8; margin-bottom: .35rem; }
+  select.input option { background: #0F172A; }
+
+  .badge { display: inline-flex; align-items: center; gap: .35rem; padding: .2rem .6rem; border-radius: 999px; font-size: .74rem; font-weight: 700; }
+  .b-run { background: rgba(79,70,229,.2); color: #A5B4FC; } .b-lock { background: rgba(239,68,68,.18); color: #FCA5A5; }
+  .b-done { background: rgba(16,185,129,.18); color: #6EE7B7; } .b-off { background: rgba(148,163,184,.16); color: #CBD5E1; }
+
+  .pulse-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--c, #10B981); position: relative; flex: none; }
+  .pulse-dot::after { content: ''; position: absolute; inset: 0; border-radius: 50%; background: var(--c, #10B981); animation: ping 1.8s cubic-bezier(0,0,.2,1) infinite; }
+  @keyframes ping { 75%, 100% { transform: scale(2.8); opacity: 0; } }
+
+  .loadbar { position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 100; opacity: 0; transition: opacity .2s; overflow: hidden; pointer-events: none; }
+  .loadbar::after { content: ''; position: absolute; top: 0; bottom: 0; width: 40%; background: #818CF8; animation: lb 1s infinite ease-in-out; }
+  @keyframes lb { from { left: -40%; } to { left: 100%; } }
+  .view-in { animation: viewin .35s ease-out both; }
+  @keyframes viewin { from { opacity: 0; transform: translateY(10px); } }
+  .pop { animation: pop .28s cubic-bezier(.2,1.2,.4,1) both; }
+  @keyframes pop { from { opacity: 0; transform: scale(.92); } }
+  .shake { animation: shake .45s both; }
+  @keyframes shake { 20%, 60% { transform: translateX(-8px); } 40%, 80% { transform: translateX(8px); } }
+  .blink { animation: blink .9s steps(2, jump-none) infinite; color: #EF4444 !important; }
+  @keyframes blink { 50% { opacity: .25; } }
+  .danger-glow { box-shadow: 0 0 0 1px rgba(239,68,68,.6), 0 0 60px -6px rgba(239,68,68,.55); }
+  .lock-bg { background: radial-gradient(circle at 50% 30%, rgba(239,68,68,.22), transparent 55%), #0B1020; }
+
+  table.t { width: 100%; border-collapse: collapse; font-size: .86rem; }
+  table.t th { text-align: left; color: #94A3B8; font-weight: 600; padding: .6rem .75rem; border-bottom: 1px solid rgba(148,163,184,.16); white-space: nowrap; }
+  table.t td { padding: .65rem .75rem; border-bottom: 1px solid rgba(148,163,184,.08); vertical-align: middle; }
+  table.t tr:hover td { background: rgba(148,163,184,.05); }
+
+  @supports (height: 100dvh) { #exam { bottom: auto; height: 100dvh; } }
+  .no-sel { -webkit-user-select: none; user-select: none; }
+  @media print { body { display: none !important; } }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+  :focus-visible { outline: 2px solid #818CF8; outline-offset: 2px; }
+</style>
+</head>
+<body>
+<div class="bg-scene"></div>
+<div id="loadbar" class="loadbar"></div>
+<div id="app"></div>
+<div id="conn" class="fixed left-3 bottom-3 z-[5]"></div>
+<div id="toasts" class="fixed top-3 right-3 z-[90] flex flex-col gap-2 w-[min(92vw,360px)]"></div>
+<div id="modal-root"></div>
+
+<script>
+/* ======================================================================
+ *  CBT NUSANTARA - Frontend
+ *  Isi API_URL dengan URL Web App Google Apps Script (.../exec).
+ *  Jika dikosongkan, aplikasi berjalan dalam MODE DEMO (data lokal di browser).
+ * ====================================================================== */
+const API_URL = 'https://script.google.com/macros/s/AKfycbzIysYx7Z3ROTokzejAnXNq_YFY_SxdEjI8h6bjlWYde_rhyvafIdbbUWgh5a6tXzclHw/exec';
+const HEARTBEAT_MS = 20000;      // sinkron status ujian siswa ke server
+const MONITOR_MS = 8000;         // refresh tabel monitoring admin
+const DASH_REFRESH_MS = 20000;   // refresh daftar ujian di dashboard siswa
+// Di HP/tablet, browser sering melepas layar penuh sendiri (keyboard, gestur kembali, bilah alamat).
+// false = keluar layar penuh di HP tidak dihitung pelanggaran (hanya diminta kembali). true = dihitung seperti di komputer.
+const MOBILE_FULLSCREEN_STRICT = false;
+
+/* ---------------------------- util ---------------------------- */
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const icon = (n, c = 'w-5 h-5') => `<i data-lucide="${n}" class="${c}"></i>`;
+const paint = () => window.lucide && lucide.createIcons();
+const timers = {};
+const clearTimers = (...names) => (names.length ? names : Object.keys(timers)).forEach(n => { clearInterval(timers[n]); delete timers[n]; });
+const fmtTime = s => { const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60, p = n => String(n).padStart(2, '0'); return (h ? p(h) + ':' : '') + p(m) + ':' + p(x); };
+
+function normForm(raw) {
+  let u = String(raw || '').trim();
+  const m = u.match(/src\s*=\s*["']([^"']+)["']/i); if (m) u = m[1];
+  u = u.replace(/&amp;/g, '&');
+  if (!/^https:\/\/(docs\.google\.com\/forms\/|forms\.gle\/)/i.test(u)) throw new Error('Link harus berupa Google Form (https://docs.google.com/forms/... atau https://forms.gle/...)');
+  if (/\/viewform/i.test(u) && !/[?&]embedded=true/i.test(u)) u += (u.includes('?') ? '&' : '?') + 'embedded=true';
+  return u;
+}
+
+/* ---------------------------- layar penuh (lintas browser) ---------------------------- */
+const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement || null;
+const fsSupported = () => { const d = document.documentElement; return !!(d.requestFullscreen || d.webkitRequestFullscreen); };   // iPhone Safari/Chrome: tidak ada
+const isStandalone = () => (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+const IS_TOUCH = !!(window.matchMedia && matchMedia('(pointer: coarse) and (hover: none)').matches);
+const IN_APP_BROWSER = /FBAN|FBAV|Instagram|Line\/|MicroMessenger|TikTok|WhatsApp|; wv\)/i.test(navigator.userAgent);
+const fsNeeded = () => fsSupported() && !isStandalone();
+function enterFs() {                     // aman dipanggil di browser apa pun; selalu mengembalikan Promise<boolean>
+  const d = document.documentElement, f = d.requestFullscreen || d.webkitRequestFullscreen;
+  if (!f) return Promise.resolve(false);
+  try { return Promise.resolve(f.call(d, { navigationUI: 'hide' })).then(() => true, () => false); } catch { return Promise.resolve(false); }
+}
+function exitFs() {
+  const f = document.exitFullscreen || document.webkitExitFullscreen;
+  if (f && fsEl()) { try { Promise.resolve(f.call(document)).catch(() => { }); } catch { } }
+}
+
+/* ---------------------------- sesi ---------------------------- */
+let S = JSON.parse(sessionStorage.getItem('cbt_session') || 'null');
+const saveS = () => sessionStorage.setItem('cbt_session', JSON.stringify(S));
+function logout() { stopExamHard(); clearTimers(); S = null; sessionStorage.removeItem('cbt_session'); viewGate(); }
+
+/* ---------------------------- API ---------------------------- */
+let pending = 0;
+function loading(d) { pending += d; const b = $('#loadbar'); if (b) b.style.opacity = pending > 0 ? 1 : 0; }
+async function httpOnce(url, opts) {
+  const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 30000);
+  loading(1);
+  const fail = (m) => { const e = new Error(m); e.transient = true; return e; };   // gangguan jaringan/server: boleh diulang
+  try {
+    let res; try { res = await fetch(url, { ...opts, signal: ctl.signal }); }
+    catch (e) { throw e.name === 'AbortError' ? fail('Server terlalu lama merespons (lebih dari 30 detik).') : fail('Tidak bisa menghubungi server. Periksa internet, API_URL, dan akses deployment "Anyone".'); }
+    const txt = await res.text(); let j;
+    try { j = JSON.parse(txt); } catch { throw fail('Server mengembalikan halaman HTML, bukan data. Di Apps Script: Execute as "Me", akses "Anyone", lalu Deploy > New version.'); }
+    if (!j.ok) throw new Error(j.error || 'Terjadi kesalahan pada server.');
+    return j;
+  } finally { clearTimeout(to); loading(-1); }
+}
+async function http(url, opts, retries = 2) {
+  for (let i = 0; ; i++) {
+    try { const j = await httpOnce(url, opts); setConn('ok'); return j; }
+    catch (e) {
+      if (e.transient && i < retries) { await new Promise(r => setTimeout(r, 700 * (i + 1))); continue; }
+      if (e.transient) setConn('off', e.message);
+      throw e;
+    }
+  }
+}
+async function api(action, payload = {}) {
+  if (!API_URL) return demoApi(action, payload);
+  return http(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, ...payload }) });
+}
+async function apiGet(action) {
+  if (!API_URL) return demoApi(action, {});
+  return http(API_URL + '?action=' + encodeURIComponent(action));
+}
+
+/* ---------------------------- UI helpers ---------------------------- */
+function toast(msg, type = 'info', ms = 3800) {
+  const map = { info: ['info', '#4F46E5'], ok: ['check-circle-2', '#10B981'], err: ['octagon-alert', '#EF4444'], warn: ['triangle-alert', '#F59E0B'] };
+  const [ic, col] = map[type] || map.info;
+  const el = document.createElement('div');
+  el.className = 'glass pop rounded-xl px-4 py-3 flex gap-3 items-start text-sm shadow-xl';
+  el.style.borderLeft = `3px solid ${col}`;
+  el.innerHTML = `<span style="color:${col}">${icon(ic, 'w-5 h-5')}</span><div class="flex-1">${esc(msg)}</div>`;
+  $('#toasts').appendChild(el); paint();
+  setTimeout(() => { el.style.transition = 'opacity .3s, transform .3s'; el.style.opacity = 0; el.style.transform = 'translateX(20px)'; setTimeout(() => el.remove(), 300); }, ms);
+}
+
+function ask({ title, body = '', ic = 'help-circle', tone = 'brand', actions, onOpen }) {
+  return new Promise(resolve => {
+    const col = { brand: '#818CF8', bad: '#F87171', ok: '#34D399' }[tone];
+    const root = document.createElement('div');
+    root.className = 'fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm';
+    root.innerHTML = `<div class="glass pop rounded-2xl p-6 w-full max-w-md" role="dialog" aria-modal="true">
+      <div class="flex gap-3 items-start"><span style="color:${col}">${icon(ic, 'w-7 h-7')}</span>
+      <div class="flex-1"><h3 class="text-lg font-bold">${esc(title)}</h3><div class="text-sm text-slate-300 mt-2 space-y-2">${body}</div></div></div>
+      <div class="flex gap-2 justify-end mt-6 flex-wrap">${actions.map(a => `<button class="btn ${a.kind || 'btn-ghost'}" data-act="${a.id}" ${a.disabled ? 'disabled' : ''}>${esc(a.label)}</button>`).join('')}</div></div>`;
+    $('#modal-root').appendChild(root); paint();
+    const close = v => { root.remove(); resolve(v); };
+    root.querySelectorAll('[data-act]').forEach(b => b.onclick = () => { const a = actions.find(x => x.id === b.dataset.act); if (a && a.sync) a.sync(); close(b.dataset.act); });
+    onOpen && onOpen(root);
+  });
+}
+
+function busy(btn, on, label) {
+  if (on) { btn.dataset.l = btn.innerHTML; btn.disabled = true; btn.innerHTML = `${icon('loader-circle', 'w-4 h-4 animate-spin')} ${esc(label || 'Memproses...')}`; paint(); }
+  else { btn.disabled = false; btn.innerHTML = btn.dataset.l; paint(); }
+}
+
+function view(html) { clearTimers('dash', 'mon', 'cd'); const a = $('#app'); a.innerHTML = html; a.firstElementChild && a.firstElementChild.classList.add('view-in'); paint(); bindTilt(); updConn(); }
+
+document.addEventListener('pointerdown', e => {            // efek ripple
+  const b = e.target.closest('.btn'); if (!b || b.disabled) return;
+  const r = b.getBoundingClientRect(), d = Math.max(r.width, r.height), s = document.createElement('span');
+  s.className = 'ripple'; s.style.cssText = `width:${d}px;height:${d}px;left:${e.clientX - r.left - d / 2}px;top:${e.clientY - r.top - d / 2}px`;
+  b.appendChild(s); setTimeout(() => s.remove(), 600);
+});
+function bindTilt() {
+  document.querySelectorAll('.tilt').forEach(el => {
+    el.addEventListener('pointermove', e => {
+      const r = el.getBoundingClientRect(), x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
+      el.style.setProperty('--rx', ((.5 - y) * 9) + 'deg'); el.style.setProperty('--ry', ((x - .5) * 11) + 'deg');
+      el.style.setProperty('--mx', (x * 100) + '%'); el.style.setProperty('--my', (y * 100) + '%');
+    });
+    el.addEventListener('pointerleave', () => { el.style.setProperty('--rx', '0deg'); el.style.setProperty('--ry', '0deg'); });
+  });
+}
+
+/* ---------------------------- status koneksi ---------------------------- */
+let conn = 'checking', connMsg = '';
+function setConn(s, msg) { if (!API_URL) s = 'demo'; if (conn === s && connMsg === (msg || '')) return; conn = s; connMsg = msg || ''; updConn(); }
+function updConn() {
+  const el = $('#conn'); if (!el) return;
+  const m = { checking: ['#F59E0B', 'Memeriksa koneksi'], ok: ['#10B981', 'Terhubung ke database'], off: ['#EF4444', 'Database tidak terjangkau (ketuk untuk detail)'], demo: ['#818CF8', 'Mode demo (data lokal)'] }[conn];
+  el.innerHTML = `<button class="glass rounded-full pl-3 pr-4 py-1.5 flex items-center gap-2 text-xs text-slate-300" onclick="connDetail()"><span class="pulse-dot" style="--c:${m[0]}"></span>${m[1]}</button>`;
+}
+function connDetail() { if (conn === 'off') toast(connMsg || 'Tidak diketahui', 'err', 9000); checkConn(); }
+async function checkConn() { if (!API_URL) return setConn('demo'); try { await apiGet('ping'); } catch (e) { /* status diatur oleh http() */ } }
+window.addEventListener('online', checkConn);
+window.addEventListener('offline', () => setConn('off', 'Perangkat tidak terhubung ke internet.'));
+
+/* ======================================================================
+ *  VIEW: GERBANG
+ * ====================================================================== */
+function viewGate() {
+  view(`<main class="min-h-screen flex flex-col items-center justify-center px-5 py-12">
+    <div class="text-center max-w-2xl">
+      <img src="logo.png" alt="Logo CBT Nusantara" class="block mx-auto w-40 sm:w-60 h-auto">
+      <div class="inline-flex items-center gap-2 glass rounded-full px-4 py-1.5 text-sm text-slate-300">${icon('shield-check', 'w-4 h-4 text-emerald-400')} Portal Asesmen Nusantara</div>
+      <h1 class="mt-6 text-5xl sm:text-7xl font-extrabold tracking-tight leading-none text-white
+           [-webkit-text-stroke:2px_black] [paint-order:stroke_fill]
+           drop-shadow-[0_4px_12px_rgba(0,0,0,0.6)]">
+  CBT NUSANTARA
+</h1>
+
+<p class="mt-5 text-white text-lg max-w-xl mx-auto
+          [-webkit-text-stroke:0.6px_black] [paint-order:stroke_fill]
+          [text-shadow:0_1px_3px_rgba(0,0,0,0.9)]">
+  Masuk sesuai dengan role dengan username dan password yang dimiliki.
+</p>
+    </div>
+    <div class="mt-12 grid sm:grid-cols-2 gap-6 w-full max-w-3xl">
+      <button class="tilt glass rounded-3xl p-8 text-left" style="--glow:rgba(79,70,229,.6)" onclick="viewLoginSiswa()">
+        <span class="w-14 h-14 rounded-2xl bg-brand/20 text-indigo-300 flex items-center justify-center">${icon('graduation-cap', 'w-7 h-7')}</span>
+        <div class="mt-6 text-2xl font-bold">Portal Siswa</div>
+        <p class="mt-2 text-slate-400 text-sm">Masuk dengan nomor peserta untuk mengerjakan ujian.</p>
+      </button>
+      <button class="tilt glass rounded-3xl p-8 text-left" style="--glow:rgba(16,185,129,.55)" onclick="viewLoginAdmin()">
+        <span class="w-14 h-14 rounded-2xl bg-ok/20 text-emerald-300 flex items-center justify-center">${icon('layout-dashboard', 'w-7 h-7')}</span>
+        <div class="mt-6 text-2xl font-bold">Portal Admin / Guru</div>
+        <p class="mt-2 text-slate-400 text-sm">Atur ujian dan pantau peserta secara langsung.</p>
+      </button>
+    </div></main>`);
+}
+
+/* ======================================================================
+ *  LOGIN
+ * ====================================================================== */
+function loginShell(title, sub, ic, body) {
+  return `<main class="min-h-screen flex items-center justify-center p-5"><div class="glass rounded-3xl p-8 w-full max-w-md">
+    <button class="btn btn-ghost btn-sm mb-6" onclick="viewGate()">${icon('arrow-left', 'w-4 h-4')} Kembali</button>
+    <div class="flex items-center gap-3"><span class="w-12 h-12 rounded-xl bg-brand/20 text-indigo-300 flex items-center justify-center">${icon(ic, 'w-6 h-6')}</span>
+    <div><h2 class="text-2xl font-bold">${title}</h2><p class="text-sm text-slate-400">${sub}</p></div></div>${body}</div></main>`;
+}
+
+async function viewLoginSiswa() {
+  view(loginShell('Portal Siswa', 'Masuk untuk memulai ujian', 'graduation-cap', `
+    <form id="f" class="mt-7 space-y-4" autocomplete="off">
+      <div><label class="lbl" for="sk">Nama sekolah</label><select id="sk" class="input" required><option value="">Memuat daftar sekolah...</option></select></div>
+      <div><label class="lbl" for="no">Nomor peserta</label><input id="no" class="input" required inputmode="numeric" placeholder="Contoh: 1001"></div>
+      <div><label class="lbl" for="pw">Password</label><input id="pw" type="password" class="input" required placeholder="Password dari sekolah"></div>
+      <button class="btn btn-primary w-full" type="submit">${icon('log-in', 'w-4 h-4')} Masuk</button>
+    </form>`));
+  const fill = list => { $('#sk').innerHTML = '<option value="">Pilih sekolah</option>' + list.map(s => `<option>${esc(s)}</option>`).join(''); };
+  const cached = JSON.parse(sessionStorage.getItem('cbt_schools') || 'null'); if (cached) fill(cached);
+  try { const r = await apiGet('schools'); sessionStorage.setItem('cbt_schools', JSON.stringify(r.schools)); const cur = $('#sk') && $('#sk').value; if ($('#sk')) { fill(r.schools); $('#sk').value = cur || ''; } }
+  catch (e) { if (!cached && $('#sk')) $('#sk').innerHTML = '<option value="">Gagal memuat sekolah</option>'; toast(e.message, 'err', 8000); }
+  $('#f').onsubmit = async e => {
+    e.preventDefault(); const b = e.submitter || $('#f button[type=submit]'); busy(b, true, 'Memeriksa data...');
+    try {
+      const r = await api('loginSiswa', { sekolah: $('#sk').value, nomor: $('#no').value.trim(), password: $('#pw').value });
+      S = { role: 'siswa', token: r.token, user: r.user, exams: r.exams, skew: r.serverNow - Date.now(), tz: r.tz, tzLabel: r.tzLabel }; saveS(); toast('Selamat datang, ' + r.user.nama, 'ok'); viewSiswaDash();
+    } catch (err) { toast(err.message, 'err'); $('#f').classList.remove('shake'); void $('#f').offsetWidth; $('#f').classList.add('shake'); busy(b, false); }
+  };
+}
+
+function viewLoginAdmin() {
+  view(loginShell('Portal Admin / Guru', 'Kelola ujian dan pantau peserta', 'layout-dashboard', `
+    <form id="f" class="mt-7 space-y-4" autocomplete="off">
+      <div><label class="lbl" for="un">Username / NIP</label><input id="un" class="input" required></div>
+      <div><label class="lbl" for="pw">Password</label><input id="pw" type="password" class="input" required></div>
+      <button class="btn btn-primary w-full" type="submit">${icon('log-in', 'w-4 h-4')} Masuk</button>
+    </form>`));
+  $('#f').onsubmit = async e => {
+    e.preventDefault(); const b = $('#f button[type=submit]'); busy(b, true, 'Memeriksa data...');
+    try {
+      const r = await api('loginAdmin', { username: $('#un').value.trim(), password: $('#pw').value });
+      S = { role: 'admin', token: r.token, user: r.user }; saveS(); toast('Halo, ' + r.user.nama, 'ok'); viewAdmin();
+    } catch (err) { toast(err.message, 'err'); busy(b, false); }
+  };
+}
+
+/* ======================================================================
+ *  DASHBOARD SISWA
+ * ====================================================================== */
+function viewSiswaDash() {
+  const u = S.user;
+  view(`<main class="max-w-5xl mx-auto p-5 sm:p-8">
+    <header class="flex items-center justify-between gap-3 flex-wrap">
+      <div class="text-xl font-extrabold tracking-tight">CBT NUSANTARA</div>
+      <button class="btn btn-ghost btn-sm" onclick="logout()">${icon('log-out', 'w-4 h-4')} Keluar</button>
+    </header>
+    <section class="mt-8 panel p-6 flex items-center gap-5 flex-wrap">
+      <span class="w-16 h-16 rounded-2xl bg-brand/25 text-indigo-200 flex items-center justify-center text-2xl font-extrabold">${esc(u.nama.charAt(0))}</span>
+      <div class="flex-1 min-w-[200px]"><div class="text-2xl font-bold">${esc(u.nama)}</div>
+        <div class="text-slate-400 text-sm mt-1">${esc(u.sekolah)} - Kelas ${esc(u.kelas)} - No. peserta ${esc(u.nomor)}</div></div>
+      <span class="badge b-done">${icon('badge-check', 'w-3.5 h-3.5')} Terverifikasi</span>
+    </section>
+    <div class="grid lg:grid-cols-5 gap-6 mt-6">
+      <section class="lg:col-span-3">
+        <div class="flex items-center justify-between mb-3"><h2 class="text-lg font-bold">Ujian untuk Anda</h2>
+          <button class="btn btn-ghost btn-sm" id="rf">${icon('refresh-cw', 'w-4 h-4')} Perbarui</button></div>
+        <div id="exams" class="space-y-3"></div>
+      </section>
+      <aside class="lg:col-span-2 panel p-6 h-fit">
+        <h2 class="text-lg font-bold flex items-center gap-2">${icon('scroll-text', 'w-5 h-5 text-amber-300')} Aturan ujian</h2>
+        <ul class="mt-4 space-y-3 text-sm text-slate-300">
+          ${['Pastikan data internet ada dan baterai terisi penuh.',
+             'Berpindah tab atau jendela dihitung sebagai pelanggaran.',
+             'Ujian berjalan dalam layar penuh. Jangan menekan lakukan swipe out atau keluar dari layar penuh.',
+             'Jika pelanggaran melewati batas, ujian terkunci dan Anda harus menemui pengawas atau panitia.',
+             'Waktu terus berjalan walau Anda keluar atau koneksi terputus.'].map(t => `<li class="flex gap-3">${icon('circle-check', 'w-4 h-4 mt-0.5 text-emerald-400 flex-none')}<span>${t}</span></li>`).join('')}
+        </ul></aside></div></main>`);
+  renderExams();
+  $('#rf').onclick = () => refreshExams(true);
+  timers.dash = setInterval(() => refreshExams(false), DASH_REFRESH_MS);
+  timers.cd = setInterval(tickCountdowns, 1000);
+}
+
+const nowMs = () => Date.now() + ((S && S.skew) || 0);       // jam server (bukan jam perangkat siswa)
+function fmtWhen(ms, tz) {
+  try { return new Date(ms).toLocaleString('id-ID', { timeZone: tz || undefined, day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }).replace(/\./g, ':').replace(',', ''); }
+  catch { return new Date(ms).toLocaleString('id-ID'); }
+}
+function calcState(x, now) {            // sama dengan perhitungan di server
+  if (x.status !== 'Aktif') return 'Nonaktif';
+  const a = x.mulaiMs, b = x.selesaiMs;
+  if (a == null && b == null) return 'Aktif';
+  if (a != null && now < a) return 'Terjadwal';
+  if (b != null && now > b) return 'Selesai';
+  return 'Berlangsung';
+}
+const fmtCountdown = s => s >= 86400 ? Math.floor(s / 86400) + ' hari ' + Math.floor(s % 86400 / 3600) + ' jam' : fmtTime(s);
+
+function renderExams() {
+  const box = $('#exams'); if (!box) return;
+  const now = nowMs();
+  const list = S.exams.map(e => ({ ...e, state: calcState({ ...e, status: 'Aktif' }, now) })).filter(e => e.state !== 'Selesai');
+  if (!list.length) { box.innerHTML = `<div class="panel p-8 text-center text-slate-400">${icon('calendar-x', 'w-8 h-8 mx-auto mb-3')}Belum ada ujian untuk sekolah Anda. Daftar ini diperbarui otomatis saat guru mengaktifkan atau menjadwalkan ujian.</div>`; paint(); return; }
+  box.innerHTML = list.map(e => {
+    const wait = e.state === 'Terjadwal';
+    const when = [e.mulaiMs ? 'Dibuka ' + fmtWhen(e.mulaiMs, S.tz) : '', e.selesaiMs ? 'Ditutup ' + fmtWhen(e.selesaiMs, S.tz) : ''].filter(Boolean).join(' - ');
+    return `<div class="panel p-5 flex items-center gap-4 flex-wrap">
+      <span class="w-11 h-11 rounded-xl ${wait ? 'bg-brand/15 text-indigo-300' : 'bg-ok/15 text-emerald-300'} flex items-center justify-center">${icon(wait ? 'calendar-clock' : 'file-pen-line', 'w-5 h-5')}</span>
+      <div class="flex-1 min-w-[180px]"><div class="font-bold">${esc(e.nama)}</div>
+        <div class="text-xs text-slate-400 mt-1 flex gap-3 flex-wrap"><span>${icon('timer', 'w-3.5 h-3.5 inline -mt-0.5')} ${e.durasi} menit</span><span>${icon('shield-alert', 'w-3.5 h-3.5 inline -mt-0.5')} Batas pelanggaran ${e.batas}</span>${e.perluToken ? `<span class="text-amber-300">${icon('key-round', 'w-3.5 h-3.5 inline -mt-0.5')} Perlu token</span>` : ''}</div>
+        ${when ? `<div class="text-xs text-slate-500 mt-1">${esc(when)} ${esc(S.tzLabel || '')}</div>` : ''}
+        ${wait ? `<div class="text-sm font-semibold text-indigo-300 mt-1" data-cd="${e.mulaiMs}">&nbsp;</div>` : ''}</div>
+      ${wait ? `<button class="btn btn-ghost" disabled>${icon('lock', 'w-4 h-4')} Belum dibuka</button>` : `<button class="btn btn-primary" data-start="${esc(e.id)}">${icon('play', 'w-4 h-4')} Mulai ujian</button>`}</div>`;
+  }).join('');
+  box.querySelectorAll('[data-start]').forEach(b => b.onclick = () => beginExam(b.dataset.start));
+  paint(); tickCountdowns();
+}
+function tickCountdowns() {
+  const els = document.querySelectorAll('[data-cd]'); if (!els.length) return;
+  const now = nowMs(); let ready = false;
+  els.forEach(el => { const left = Math.ceil((+el.dataset.cd - now) / 1000); if (left <= 0) ready = true; else el.textContent = 'Dibuka dalam ' + fmtCountdown(left); });
+  if (ready) { renderExams(); toast('Ujian sudah dibuka. Anda bisa memulai.', 'ok', 4000); }
+}
+
+async function refreshExams(manual) {
+  try {
+    const r = await api('getExams', { token: S.token });
+    S.exams = r.exams; S.skew = r.serverNow - Date.now(); S.tz = r.tz; S.tzLabel = r.tzLabel; saveS(); renderExams();
+    manual && toast('Daftar ujian diperbarui', 'ok', 1800);
+  } catch (e) { if (/Sesi berakhir/.test(e.message)) { toast(e.message, 'warn'); logout(); } else manual && toast(e.message, 'err'); }
+}
+
+async function beginExam(id) {
+  const e = S.exams.find(x => x.id === id); if (!e) return;
+  const fsNote = fsNeeded() ? 'Ujian akan membuka layar penuh.'
+    : fsSupported() ? '' : 'Browser ini tidak mendukung layar penuh. Ujian tetap berjalan; berpindah aplikasi atau tab tetap dihitung pelanggaran.';
+  const appNote = IN_APP_BROWSER ? `<p class="text-amber-300">Anda membuka lewat aplikasi lain (mis. WhatsApp atau Instagram). Salin tautan lalu buka di Chrome atau Safari agar pemantauan ujian berfungsi.</p>` : '';
+  const tokenField = e.perluToken ? `<div class="mt-3"><label class="lbl" for="tok">Token ujian (dari pengawas)</label>
+    <input id="tok" class="input font-mono uppercase tracking-widest" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Masukkan token"></div>` : '';
+  let fsPromise = Promise.resolve(false), tokenVal = '', rootEl = null;
+  const go = await ask({
+    title: 'Mulai ' + e.nama + '?', ic: 'shield-alert', tone: 'brand',
+    body: `<p>Durasi <b>${e.durasi} menit</b>. ${fsNote} Pelanggaran lebih dari <b>${e.batas - 1}</b> kali akan mengunci ujian Anda.</p>${appNote}${tokenField}
+           <label class="flex gap-2 items-start mt-3 cursor-pointer"><input type="checkbox" id="agree" class="mt-1 accent-indigo-500"><span>Saya sudah membaca aturan dan siap mengerjakan.</span></label>`,
+    actions: [{ id: 'no', label: 'Batal' },
+              { id: 'go', label: 'Gaskeun', kind: 'btn-primary', disabled: true,
+                sync: () => { tokenVal = rootEl ? ((rootEl.querySelector('#tok') || {}).value || '').trim() : ''; if (fsNeeded()) fsPromise = enterFs(); } }],   // layar penuh diminta saat disentuh, sebelum menunggu server
+    onOpen: r => {
+      rootEl = r; const c = r.querySelector('#agree'), g = r.querySelector('[data-act=go]'), t = r.querySelector('#tok');
+      const upd = () => { g.disabled = !c.checked || (!!t && t.value.trim().length < 3); };
+      c.onchange = upd;
+      if (t) { t.oninput = upd; t.onkeydown = ev => { if (ev.key === 'Enter' && !g.disabled) g.click(); }; }
+    }
+  });
+  if (go !== 'go') return;
+  toast('Menyiapkan ujian...', 'info', 2500);
+  let r;
+  try { r = await api('startExam', { token: S.token, idUjian: id, tokenUjian: tokenVal }); }   // cek ulang jadwal, token, dan status di server
+  catch (err) {
+    exitFs(); toast(err.message, 'err');
+    if (/token/i.test(err.message) && !/terlalu banyak/i.test(err.message)) return beginExam(id);   // token salah: tanyakan lagi
+    refreshExams(); return;
+  }
+  const fsOk = await fsPromise;
+  if (r.status !== 'Sedang Mengerjakan') exitFs();
+  runExam(r, fsOk);
+}
+
+/* ======================================================================
+ *  HALAMAN UJIAN + SISTEM ANTI-KECURANGAN
+ * ====================================================================== */
+let X = null;                  // state ujian aktif
+const G = {};                  // handler guard
+let lastV = 0;
+
+const logKey = () => `cbt_log_${X.id}_${S.user.nomor}`;
+function logLocal(type) { try { const k = logKey(), a = JSON.parse(localStorage.getItem(k) || '[]'); a.push({ t: new Date().toISOString(), type }); localStorage.setItem(k, JSON.stringify(a)); } catch { } }
+
+function runExam(r, fsOk) {
+  const u = S.user;
+  X = { id: r.exam.id, nama: r.exam.nama, sekolah: r.exam.sekolah, batas: r.batas, vio: r.violations, endAt: Date.now() + r.remainingSec * 1000,
+        link: r.link || '', locked: false, finished: false, active: false, inflight: 0, loads: 0, lockedAt: 0, devOpen: false };
+  clearTimers();
+  view(`<div id="exam" class="fixed inset-0 flex flex-col bg-ink no-sel">
+    <header class="relative z-20 bg-slate-900/95 border-b border-slate-700/60 px-3 sm:px-5 py-2.5 flex items-center gap-3 flex-wrap">
+      <div class="min-w-0 flex-1 basis-60">
+        <div class="font-bold truncate">${esc(X.nama)}</div>
+        <div class="text-xs text-slate-400 truncate">${esc(X.sekolah)} - ${esc(u.nama)} - Kelas ${esc(u.kelas)}</div>
+      </div>
+      <div id="timer-wrap" class="flex items-center gap-2 font-extrabold text-xl tabular-nums">${icon('timer', 'w-5 h-5 text-slate-400')}<span id="timer">--:--</span></div>
+      <span id="vbadge" class="badge b-done"></span>
+      <button id="btn-finish" class="btn btn-ok btn-sm">${icon('flag', 'w-4 h-4')} Selesai ujian</button>
+    </header>
+    <div id="fsbar" class="hidden z-20 bg-amber-500/15 border-b border-amber-500/40 text-amber-200 text-sm px-4 py-2 items-center gap-3 flex-wrap">
+      ${icon('maximize', 'w-4 h-4')}<span class="flex-1" id="fs-text">Layar penuh tidak aktif.</span><button id="btn-fs" class="btn btn-sm btn-ghost">Masuk layar penuh</button></div>
+    <main class="relative flex-1 min-h-0 bg-white">
+      <iframe id="frame" title="Soal ujian" class="absolute inset-0 w-full h-full border-0 bg-white" sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer"></iframe>
+      <div id="wm" class="absolute inset-0 pointer-events-none z-10"></div>
+    </main>
+    <div id="overlay-root"></div></div>`);
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='340' height='200'><text x='20' y='110' transform='rotate(-20 170 100)' fill='rgba(79,70,229,.17)' font-size='15' font-family='sans-serif'>${esc(u.nama)} - ${esc(u.nomor)}</text></svg>`;
+  $('#wm').style.backgroundImage = `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+  $('#btn-fs').onclick = async () => {
+    if (await enterFs()) return;
+    toast(fsSupported() ? 'Browser menolak layar penuh. Coba ketuk tombol sekali lagi, atau buka lewat Chrome/Safari (bukan dari dalam aplikasi lain).' : 'Browser ini tidak mendukung layar penuh.', 'warn', 7000);
+  };
+  $('#btn-finish').onclick = confirmFinish;
+  $('#frame').addEventListener('load', () => { X && X.loads++; if (X && X.loads >= 2 && !X.locked && !X.finished) toast('Jika jawaban sudah terkirim, tekan "Selesai ujian".', 'info', 8000); });
+  updBadge();
+  if (r.status === 'Sedang Mengerjakan' && !fsSupported() && !isStandalone()) toast('Browser ini tidak mendukung layar penuh. Pelanggaran layar penuh tidak dihitung, tetapi berpindah aplikasi atau tab tetap dihitung. Di iPhone, buka lewat "Tambahkan ke Layar Utama" untuk tampilan penuh.', 'info', 12000);
+  if (r.status === 'Sedang Mengerjakan') { setFrame(); startGuard(); timers.tick = setInterval(tick, 1000); timers.hb = setInterval(heartbeat, HEARTBEAT_MS); tick(); }
+  else if (r.status === 'Terkunci') { X.locked = true; showEnd('locked'); }
+  else { X.finished = true; showEnd(/Waktu/.test(r.status) ? 'timeup' : 'done'); }
+}
+
+function setFrame() { const f = $('#frame'); if (f) { X.loads = 0; f.style.visibility = 'visible'; f.src = X.link; } }
+function updBadge() {
+  const b = $('#vbadge'); if (!b || !X) return;
+  const ratio = X.vio / X.batas;
+  b.className = 'badge ' + (X.vio === 0 ? 'b-done' : ratio >= .66 ? 'b-lock' : 'b-off');
+  if (X.vio > 0 && ratio < .66) b.style.cssText = 'background:rgba(245,158,11,.2);color:#FCD34D'; else b.style.cssText = '';
+  b.innerHTML = `${icon('shield-alert', 'w-3.5 h-3.5')} Pelanggaran: ${X.vio} / ${X.batas}`; paint();
+}
+function tick() {
+  if (!X || X.finished) return;
+  const left = Math.max(0, Math.round((X.endAt - Date.now()) / 1000));
+  const t = $('#timer'); if (t) t.textContent = fmtTime(left);
+  const w = $('#timer-wrap'); if (w) w.classList.toggle('blink', left > 0 && left < 300);
+  const fs = $('#fsbar'); if (fs) { const show = fsNeeded() && !fsEl() && !X.locked; fs.classList.toggle('hidden', !show); fs.classList.toggle('flex', show); }
+  if (left <= 0 && !X.locked) timeUp();
+}
+async function timeUp() {
+  if (X.finished) return; X.finished = true; stopGuard(); try { await api('finish', { token: S.token, idUjian: X.id, reason: 'timeout' }); } catch { }
+  killFrame(); showEnd('timeup');
+}
+
+/* ---- guard ---- */
+function startGuard() {
+  X.active = true; lastV = Date.now();
+  G.vis = () => { if (document.hidden) violate('Berpindah tab atau jendela'); };
+  G.blur = () => setTimeout(() => { const f = $('#frame'); if (document.hasFocus() || (f && document.activeElement === f)) return; violate('Meninggalkan jendela ujian'); }, 80);
+  G.fs = () => {
+    if (!X || !X.active || X.exiting || fsEl() || !fsNeeded()) return;
+    if (IS_TOUCH && !MOBILE_FULLSCREEN_STRICT) { toast('Layar penuh terlepas. Ketuk "Masuk layar penuh" untuk kembali.', 'warn', 5000); return; }
+    violate('Keluar dari layar penuh');
+  };
+  G.key = e => {
+    const k = (e.key || '').toLowerCase(), c = e.ctrlKey || e.metaKey, s = e.shiftKey;
+    if (k === 'f12' || (c && s && ['i', 'j', 'c', 'k'].includes(k)) || (c && k === 'u')) { e.preventDefault(); e.stopPropagation(); violate('Mencoba membuka alat pengembang'); }
+    else if (c && ['c', 'v', 'x', 'a', 'p', 's'].includes(k)) { e.preventDefault(); toast('Salin, tempel, dan cetak dinonaktifkan selama ujian.', 'warn', 2200); }
+    else if (k === 'f5' || (c && k === 'r') || k === 'f11') { e.preventDefault(); toast('Tombol ini dinonaktifkan selama ujian.', 'warn', 2200); }
+    else if (e.altKey && k === 'tab') e.preventDefault();
+  };
+  G.keyup = e => { if (e.key === 'PrintScreen') { try { navigator.clipboard.writeText(''); } catch { } violate('Mengambil tangkapan layar'); } };
+  G.stop = e => { e.preventDefault(); };
+  G.print = () => violate('Mencoba mencetak halaman');
+  G.unload = e => { e.preventDefault(); e.returnValue = ''; };
+  document.addEventListener('visibilitychange', G.vis); window.addEventListener('blur', G.blur);
+  document.addEventListener('fullscreenchange', G.fs); document.addEventListener('webkitfullscreenchange', G.fs);
+  window.addEventListener('keydown', G.key, true); window.addEventListener('keyup', G.keyup, true);
+  ['contextmenu', 'copy', 'cut', 'paste', 'dragstart', 'selectstart'].forEach(ev => document.addEventListener(ev, G.stop, true));
+  window.addEventListener('beforeprint', G.print); window.addEventListener('beforeunload', G.unload);
+  timers.dev = setInterval(() => {                            // deteksi DevTools yang menempel (saat layar penuh)
+    if (!X || X.locked) return;
+    const open = !IS_TOUCH && !!fsEl() && (window.outerWidth - window.innerWidth > 200 || window.outerHeight - window.innerHeight > 250);
+    if (open && !X.devOpen) violate('Terdeteksi alat pengembang terbuka'); X.devOpen = open;
+  }, 2000);
+}
+function stopGuard() {
+  if (X) X.active = false;
+  document.removeEventListener('visibilitychange', G.vis); window.removeEventListener('blur', G.blur); document.removeEventListener('fullscreenchange', G.fs); document.removeEventListener('webkitfullscreenchange', G.fs);
+  window.removeEventListener('keydown', G.key, true); window.removeEventListener('keyup', G.keyup, true);
+  ['contextmenu', 'copy', 'cut', 'paste', 'dragstart', 'selectstart'].forEach(ev => document.removeEventListener(ev, G.stop, true));
+  window.removeEventListener('beforeprint', G.print); window.removeEventListener('beforeunload', G.unload);
+  clearTimers('dev');
+}
+function leaveFullscreen() { if (fsEl()) { if (X) X.exiting = true; exitFs(); setTimeout(() => X && (X.exiting = false), 600); } }
+function killFrame() { const f = $('#frame'); if (f) { f.src = 'about:blank'; f.style.visibility = 'hidden'; } }
+function stopExamHard() { if (!X) return; stopGuard(); clearTimers('tick', 'hb', 'dev'); leaveFullscreen(); X = null; }
+
+/* ---- pelanggaran ---- */
+function violate(type) {
+  if (!X || !X.active || X.locked || X.finished) return;
+  const now = Date.now(); if (now - lastV < 1500) return; lastV = now;       // satu aksi = satu pelanggaran
+  X.vio++; updBadge(); logLocal(type);
+  if (X.vio >= X.batas) lockNow(); else showWarning(type);
+  X.inflight++;
+  api('violation', { token: S.token, idUjian: X.id, type, clientViolations: X.vio }).then(syncState).catch(() => { /* offline: heartbeat akan menyinkronkan */ }).finally(() => X && X.inflight--);
+}
+function showWarning(type) {
+  const root = $('#overlay-root'); if (!root) return;
+  root.innerHTML = `<div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"><div class="shake danger-glow rounded-2xl bg-slate-900 p-7 w-full max-w-md text-center">
+    <span class="mx-auto w-16 h-16 rounded-full bg-bad/20 text-red-400 flex items-center justify-center">${icon('triangle-alert', 'w-8 h-8')}</span>
+    <h3 class="mt-4 text-xl font-extrabold text-red-300">Peringatan!</h3>
+    <p class="mt-2 text-slate-200">Kok keluar dari halaman ujian sih (Pelanggaran ke-${X.vio} dari ${X.batas}).</p>
+    <p class="mt-1 text-sm text-slate-400">${esc(type)}. Sisa kesempatan: ${X.batas - X.vio}.</p>
+    <button id="warn-ok" class="btn btn-danger w-full mt-6">${icon('rotate-ccw', 'w-4 h-4')} Kembali ke ujian</button></div></div>`;
+  paint();
+  $('#warn-ok').onclick = () => { root.innerHTML = ''; if (fsNeeded() && !fsEl()) enterFs(); };
+}
+function lockNow() {
+  if (!X || X.locked) return;
+  X.locked = true; X.lockedAt = Date.now(); killFrame(); leaveFullscreen(); showEnd('locked');
+}
+function unlockNow() {
+  X.locked = false; $('#overlay-root').innerHTML = ''; setFrame(); updBadge();
+  toast('Pengawas telah membuka kunci ujian Anda. Lanjutkan mengerjakan.', 'ok', 6000);
+}
+function showEnd(kind) {
+  const root = $('#overlay-root'); if (!root) return;
+  const c = {
+    locked: ['lock', 'text-red-400', 'bg-bad/20', 'UJIAN TERKUNCI!', 'Yah kelebihan batas nih curangnya wkwkwk:P. Ayo hubungi panitia/pengawas ujian.'],
+    timeup: ['alarm-clock-off', 'text-amber-300', 'bg-amber-500/20', 'WAKTU HABIS', 'Waktu ujian telah berakhir. Jawaban yang sudah terkirim tersimpan di Google Form.'],
+    done: ['circle-check-big', 'text-emerald-300', 'bg-ok/20', 'BERES NICH', 'What next? Yuk cek dashboard.']
+  }[kind];
+  root.innerHTML = `<div class="fixed inset-0 z-[60] flex items-center justify-center p-6 text-center ${kind === 'locked' ? 'lock-bg' : 'bg-slate-950'}"><div class="pop max-w-lg">
+    <span class="mx-auto w-24 h-24 rounded-full ${c[2]} ${c[1]} flex items-center justify-center ${kind === 'locked' ? 'danger-glow' : ''}">${icon(c[0], 'w-12 h-12')}</span>
+    <h2 class="mt-6 text-4xl font-extrabold tracking-tight ${c[1]}">${c[3]}</h2>
+    <p class="mt-4 text-slate-300 text-lg">${c[4]}</p>
+    ${X ? `<p class="mt-2 text-sm text-slate-500">Pelanggaran tercatat: ${X.vio} dari ${X.batas}</p>` : ''}
+    <button id="back" class="btn btn-ghost mt-8">${icon('house', 'w-4 h-4')} Kembali ke dashboard</button></div></div>`;
+  paint();
+  $('#back').onclick = () => { stopExamHard(); viewSiswaDash(); refreshExams(); };
+}
+
+async function confirmFinish() {
+  if (!X || X.finished || X.locked) return;
+  const r = await ask({ title: 'Yakin selesai?', ic: 'flag', tone: 'ok', body: '<p>Pastiin ujiannya udah di kirim dulu. kalau udah keluar ga bisa masuk lagi loh!</p>',
+    actions: [{ id: 'no', label: 'Cek lagi ah' }, { id: 'yes', label: 'Dahlah, beres', kind: 'btn-ok' }] });
+  if (r !== 'yes') return;
+  X.finished = true; stopGuard();
+  try { await api('finish', { token: S.token, idUjian: X.id }); } catch (e) { toast('Status selesai belum tersimpan di server: ' + e.message, 'warn'); }
+  killFrame(); leaveFullscreen(); showEnd('done');
+}
+
+/* ---- sinkron dengan server ---- */
+async function heartbeat() {
+  if (!X || X.finished) return;
+  try { syncState(await api('heartbeat', { token: S.token, idUjian: X.id, clientViolations: X.vio })); }
+  catch (e) { if (/Sesi berakhir/.test(e.message)) toast('Sesi login berakhir. Jawaban di Google Form tetap aman; login ulang untuk melanjutkan.', 'warn', 8000); }
+}
+function syncState(r) {
+  if (!X || X.finished || !r) return;
+  if (typeof r.remainingSec === 'number') X.endAt = Date.now() + r.remainingSec * 1000;
+  if (r.batas) X.batas = r.batas;
+  if (r.status === 'Terkunci') { X.vio = Math.max(X.vio, r.violations); if (!X.locked) lockNow(); }
+  else if (r.status === 'Sedang Mengerjakan') {
+    if (X.locked) { if (!X.inflight && Date.now() - X.lockedAt > 12000 && r.violations < X.batas) { X.vio = r.violations; unlockNow(); } }
+    else { if (r.violations > X.vio) X.vio = r.violations; if (r.examActive === false) toast('Admin menonaktifkan ujian ini. Hubungi pengawas.', 'warn', 6000); }
+  } else if (/^Selesai/.test(r.status || '')) { X.finished = true; stopGuard(); killFrame(); leaveFullscreen(); showEnd(/Waktu/.test(r.status) ? 'timeup' : 'done'); }
+  updBadge();
+}
+
+/* ======================================================================
+ *  DASHBOARD ADMIN
+ * ====================================================================== */
+let A = { tab: 'ujian', exams: [], schools: [], logs: [], filter: '', q: '', sf: '', skew: 0, tz: '', tzLabel: 'WIB' };
+
+async function viewAdmin() {
+  const u = S.user;
+  view(`<main class="max-w-6xl mx-auto p-5 sm:p-8">
+    <header class="flex items-center justify-between gap-3 flex-wrap">
+      <div><div class="text-xl font-extrabold tracking-tight">CBT NUSANTARA</div><div class="text-sm text-slate-400">${esc(u.nama)} - ${u.sekolah === '*' ? 'Semua sekolah' : esc(u.sekolah)}</div></div>
+      <button class="btn btn-ghost btn-sm" onclick="logout()">${icon('log-out', 'w-4 h-4')} Keluar</button>
+    </header>
+    <nav class="mt-6 inline-flex glass rounded-xl p-1 gap-1">
+      <button class="btn btn-sm" id="tab-ujian">${icon('settings-2', 'w-4 h-4')} Pengaturan ujian</button>
+      <button class="btn btn-sm" id="tab-mon">${icon('activity', 'w-4 h-4')} Monitoring langsung</button>
+    </nav>
+    <div id="tab" class="mt-6"></div></main>`);
+  $('#tab-ujian').onclick = () => setTab('ujian'); $('#tab-mon').onclick = () => setTab('mon');
+  $('#tab').innerHTML = '<div class="panel p-8 text-center text-slate-400">Memuat data...</div>';
+  try { const r = await api('adminGetExams', { token: S.token }); A.schools = r.schools; A.exams = r.exams; A.skew = r.serverNow - Date.now(); A.tz = r.tz; A.tzLabel = r.tzLabel; }
+  catch (err) { toast(err.message, 'err'); if (/Sesi berakhir/.test(err.message)) return logout(); }
+  setTab(A.tab);
+}
+function setTab(t) {
+  A.tab = t; clearTimers('mon');
+  $('#tab-ujian').className = 'btn btn-sm ' + (t === 'ujian' ? 'btn-primary' : 'btn-ghost');
+  $('#tab-mon').className = 'btn btn-sm ' + (t === 'mon' ? 'btn-primary' : 'btn-ghost');
+  t === 'ujian' ? renderExamAdmin() : renderMonitor();
+}
+
+const newId = () => 'UJ-' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 5).toUpperCase();
+const genToken = () => { const a = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789', v = crypto.getRandomValues(new Uint8Array(6)); return Array.from(v, n => a[n % a.length]).join(''); };
+async function copyText(t) { try { await navigator.clipboard.writeText(t); toast('Token disalin', 'ok', 1500); } catch { toast('Tidak bisa menyalin otomatis. Token: ' + t, 'warn', 6000); } }
+const stCls = { Berlangsung: 'b-done', Aktif: 'b-done', Terjadwal: 'b-run', Selesai: 'b-off', Nonaktif: 'b-off' };
+
+function renderExamAdmin(edit) {
+  const scoped = S.user.sekolah !== '*', e = edit || { id: '', sekolah: scoped ? S.user.sekolah : '', nama: '', link: '', batas: 3, durasi: 60, status: 'Aktif', mulai: '', selesai: '', token: '' };
+  const hasSched = !!(e.mulai || e.selesai), tz = A.tzLabel || 'perangkat ini';
+  $('#tab').innerHTML = `<div class="grid xl:grid-cols-5 gap-6">
+    <form id="fx" class="panel p-6 xl:col-span-2 space-y-4 h-fit">
+      <h2 class="text-lg font-bold">${e.id ? 'Ubah ujian' : 'Tambah ujian'}</h2>
+      <input type="hidden" id="x-id" value="${esc(e.id)}">
+      <div><label class="lbl" for="x-sk">Nama sekolah</label>
+        <input id="x-sk" class="input" list="dl-sk" required value="${esc(e.sekolah)}" ${scoped ? 'readonly' : ''} placeholder="Pilih atau ketik nama sekolah">
+        <datalist id="dl-sk">${A.schools.map(s => `<option value="${esc(s)}">`).join('')}</datalist></div>
+      <div><label class="lbl" for="x-nm">Nama ujian</label><input id="x-nm" class="input" required value="${esc(e.nama)}" placeholder="PAS Matematika Kelas 12"></div>
+      <div><label class="lbl" for="x-ln">Link Google Form</label><textarea id="x-ln" class="input" rows="2" required placeholder="Tempel link formulir atau kode embed (iframe)">${esc(e.link)}</textarea>
+        <p class="text-xs text-slate-500 mt-1">Parameter embed ditambahkan otomatis.</p></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="lbl" for="x-bt">Maksimal pelanggaran</label><input id="x-bt" type="number" min="1" class="input" required value="${e.batas}"></div>
+        <div><label class="lbl" for="x-dr">Waktu ujian (menit)</label><input id="x-dr" type="number" min="1" class="input" required value="${e.durasi}"></div></div>
+      <div class="rounded-xl border border-slate-700/60 p-4 space-y-3">
+        <label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="x-sched" class="accent-indigo-500 w-4 h-4" ${hasSched ? 'checked' : ''}><span class="font-semibold">${icon('calendar-clock', 'w-4 h-4 inline -mt-0.5 text-indigo-300')} Jadwal otomatis</span></label>
+        <div id="x-sched-box" class="${hasSched ? '' : 'hidden'} space-y-3">
+          <div class="grid sm:grid-cols-2 gap-3">
+            <div><label class="lbl" for="x-mulai">Dibuka pada</label><input id="x-mulai" type="datetime-local" class="input" value="${esc(e.mulai)}"></div>
+            <div><label class="lbl" for="x-selesai">Ditutup pada</label><input id="x-selesai" type="datetime-local" class="input" value="${esc(e.selesai)}"></div></div>
+          <p class="text-xs text-slate-500">Zona waktu ${esc(tz)}. Ujian dibuka dan ditutup sendiri sesuai jadwal. Peserta yang masih mengerjakan saat jadwal ditutup otomatis diselesaikan. Biarkan Status = Aktif.</p></div>
+        <p id="x-sched-off" class="${hasSched ? 'hidden' : ''} text-xs text-slate-500">Dimatikan: ujian dibuka dan ditutup manual lewat Status.</p></div>
+      <div><label class="lbl" for="x-token">Token ujian (opsional)</label>
+        <div class="flex gap-2"><input id="x-token" class="input font-mono uppercase tracking-widest" maxlength="12" autocomplete="off" spellcheck="false" value="${esc(e.token)}" placeholder="Kosongkan jika tanpa token">
+          <button type="button" class="btn btn-ghost" id="x-tok-gen">${icon('shuffle', 'w-4 h-4')} Acak</button></div>
+        <p class="text-xs text-slate-500 mt-1">Siswa harus memasukkan token ini sebelum mulai. Umumkan token saat ujian akan dimulai.</p></div>
+      <div><label class="lbl" for="x-st">Status</label><select id="x-st" class="input"><option ${e.status === 'Aktif' ? 'selected' : ''}>Aktif</option><option ${e.status !== 'Aktif' ? 'selected' : ''}>Nonaktif</option></select></div>
+      <div class="flex gap-2"><button class="btn btn-primary flex-1" type="submit">${icon('save', 'w-4 h-4')} ${e.id ? 'Simpan perubahan' : 'Simpan ujian'}</button>
+        ${e.id ? `<button type="button" class="btn btn-ghost" id="x-cancel">Batal</button>` : ''}</div>
+    </form>
+    <section id="exam-list" class="panel p-4 xl:col-span-3 overflow-x-auto"></section></div>`;
+  paint();
+  $('#x-sched').onchange = ev => { $('#x-sched-box').classList.toggle('hidden', !ev.target.checked); $('#x-sched-off').classList.toggle('hidden', ev.target.checked); };
+  $('#x-tok-gen').onclick = () => { $('#x-token').value = genToken(); };
+  $('#fx').onsubmit = async ev => {
+    ev.preventDefault(); const b = $('#fx button[type=submit]'); busy(b, true, 'Menyimpan...');
+    try {
+      normForm($('#x-ln').value);
+      const useS = $('#x-sched').checked, mulai = useS ? $('#x-mulai').value : '', selesai = useS ? $('#x-selesai').value : '';
+      if (useS && !mulai && !selesai) throw new Error('Isi jadwal dibuka dan/atau ditutup, atau matikan jadwal otomatis.');
+      if (mulai && selesai && selesai <= mulai) throw new Error('Jadwal ditutup harus setelah jadwal dibuka.');
+      const token = $('#x-token').value.trim().toUpperCase();
+      if (token && !/^[A-Z0-9]{3,12}$/.test(token)) throw new Error('Token 3 sampai 12 karakter, hanya huruf dan angka.');
+      const dur = +$('#x-dr').value;
+      if (mulai && selesai && (Date.parse(selesai) - Date.parse(mulai)) / 60000 < dur) toast('Catatan: rentang jadwal lebih singkat dari durasi ujian. Peserta dihentikan saat jadwal ditutup.', 'warn', 8000);
+      const id = $('#x-id').value || newId(); $('#x-id').value = id;          // ID dibuat di sini agar pengulangan tidak menggandakan ujian
+      const r = await api('adminSaveExam', { token: S.token, exam: { id, sekolah: $('#x-sk').value.trim(), nama: $('#x-nm').value.trim(), link: $('#x-ln').value,
+        batas: +$('#x-bt').value, durasi: dur, status: $('#x-st').value, mulai, selesai, token } });
+      A.exams = r.exams; toast('Ujian tersimpan dan tersinkron ke Google Sheets', 'ok'); renderExamAdmin();
+    } catch (err) { toast(err.message, 'err'); busy(b, false); }
+  };
+  const c = $('#x-cancel'); if (c) c.onclick = () => renderExamAdmin();
+  drawExamTable();
+}
+
+function drawExamTable() {
+  const box = $('#exam-list'); if (!box) return;
+  const sched = x => (x.mulaiMs || x.selesaiMs)
+    ? `<div class="text-xs leading-5 whitespace-nowrap">${x.mulaiMs ? 'Buka ' + fmtWhen(x.mulaiMs, A.tz) : ''}${x.mulaiMs && x.selesaiMs ? '<br>' : ''}${x.selesaiMs ? 'Tutup ' + fmtWhen(x.selesaiMs, A.tz) : ''}<span class="text-slate-500"> ${esc(A.tzLabel)}</span></div>`
+    : '<span class="text-xs text-slate-500">Manual</span>';
+  const tokenCell = x => x.token
+    ? `<div class="flex items-center gap-1 whitespace-nowrap"><span class="font-mono font-semibold tracking-widest">${esc(x.token)}</span>
+       <button class="btn btn-ghost btn-sm" data-tc="${esc(x.id)}" title="Salin token" aria-label="Salin token">${icon('copy', 'w-3.5 h-3.5')}</button>
+       <button class="btn btn-ghost btn-sm" data-tb="${esc(x.id)}" title="Tampilkan besar" aria-label="Tampilkan token besar">${icon('maximize-2', 'w-3.5 h-3.5')}</button></div>`
+    : '<span class="text-xs text-slate-500">-</span>';
+  box.innerHTML = `<h2 class="text-lg font-bold px-2 pt-1 pb-3">Daftar ujian</h2>
+    <table class="t"><thead><tr><th>Ujian</th><th>Jadwal</th><th>Durasi</th><th>Status</th><th>Token</th><th></th></tr></thead><tbody>
+    ${A.exams.length ? A.exams.map(x => `<tr><td><div class="font-semibold">${esc(x.nama)}</div><div class="text-xs text-slate-500">${esc(x.sekolah)} - ${esc(x.id)}</div></td><td>${sched(x)}</td>
+      <td class="whitespace-nowrap">${x.durasi} mnt<div class="text-xs text-slate-500">batas ${x.batas}x</div></td>
+      <td><button class="badge ${stCls[x.state] || 'b-off'}" data-tg="${esc(x.id)}" title="Klik untuk aktifkan atau nonaktifkan">${esc(x.state)}</button></td>
+      <td>${tokenCell(x)}</td>
+      <td class="whitespace-nowrap text-right"><button class="btn btn-ghost btn-sm" data-ed="${esc(x.id)}" aria-label="Ubah">${icon('pencil', 'w-4 h-4')}</button>
+      <button class="btn btn-ghost btn-sm" data-dl="${esc(x.id)}" aria-label="Hapus">${icon('trash-2', 'w-4 h-4 text-red-400')}</button></td></tr>`).join('')
+      : `<tr><td colspan="6" class="text-center text-slate-500 py-8">Belum ada ujian. Isi formulir di samping untuk menambahkan.</td></tr>`}
+    </tbody></table>
+    <p class="text-xs text-slate-500 px-2 pt-3">Klik badge status untuk mengaktifkan atau menonaktifkan. Pada ujian berjadwal, badge menunjukkan Terjadwal, Berlangsung, atau Selesai; Nonaktif selalu menutup ujian.</p>`;
+  paint();
+  box.querySelectorAll('[data-ed]').forEach(b => b.onclick = () => { renderExamAdmin(A.exams.find(x => x.id === b.dataset.ed)); window.scrollTo({ top: 0, behavior: 'smooth' }); });
+  box.querySelectorAll('[data-tc]').forEach(b => b.onclick = () => copyText(A.exams.find(x => x.id === b.dataset.tc).token));
+  box.querySelectorAll('[data-tb]').forEach(b => b.onclick = () => {
+    const x = A.exams.find(v => v.id === b.dataset.tb);
+    ask({ title: x.nama, ic: 'key-round', body: `<div class="text-center py-4"><div class="text-xs text-slate-400">Token ujian</div><div class="mt-2 font-mono font-extrabold tracking-[.25em] text-5xl break-all text-indigo-200">${esc(x.token)}</div></div>`, actions: [{ id: 'ok', label: 'Tutup', kind: 'btn-primary' }] });
+  });
+  box.querySelectorAll('[data-tg]').forEach(b => b.onclick = async () => {          // ubah status: tampil langsung, dibatalkan jika gagal
+    const x = A.exams.find(v => v.id === b.dataset.tg), prev = x.status, prevState = x.state;
+    x.status = prev === 'Aktif' ? 'Nonaktif' : 'Aktif'; x.state = calcState(x, Date.now() + A.skew); drawExamTable();
+    try { const r = await api('adminSaveExam', { token: S.token, exam: { ...x } }); A.exams = r.exams; drawExamTable(); toast('Status: ' + (r.exams.find(v => v.id === x.id) || x).state, 'ok', 1800); }
+    catch (err) { x.status = prev; x.state = prevState; drawExamTable(); toast('Status tidak berubah. ' + err.message, 'err', 6000); }
+  });
+  box.querySelectorAll('[data-dl]').forEach(b => b.onclick = async () => {
+    const x = A.exams.find(v => v.id === b.dataset.dl);
+    const r = await ask({ title: 'Hapus ujian?', ic: 'trash-2', tone: 'bad', body: `<p><b>${esc(x.nama)}</b> akan dihapus dari Google Sheets. Log peserta tetap tersimpan.</p>`, actions: [{ id: 'no', label: 'Batal' }, { id: 'yes', label: 'Hapus', kind: 'btn-danger' }] });
+    if (r !== 'yes') return;
+    const before = A.exams; A.exams = A.exams.filter(v => v.id !== x.id); drawExamTable();
+    try { const res = await api('adminDeleteExam', { token: S.token, id: x.id }); A.exams = res.exams; drawExamTable(); toast('Ujian dihapus', 'ok'); }
+    catch (err) { A.exams = before; drawExamTable(); toast('Gagal menghapus. ' + err.message, 'err'); }
+  });
+}
+
+const norm = s => String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+const statusRank = s => s === 'Terkunci' ? 0 : s === 'Sedang Mengerjakan' ? 1 : 2;
+const isDone = x => /^Selesai/.test(x.status);
+
+function renderMonitor() {
+  $('#tab').innerHTML = `<div class="space-y-4">
+    <div class="flex items-center gap-3 flex-wrap">
+      <select id="m-f" class="input max-w-xs"><option value="">Semua ujian</option>${A.exams.map(x => `<option value="${esc(x.id)}" ${A.filter === x.id ? 'selected' : ''}>${esc(x.nama)} (${esc(x.sekolah)})</option>`).join('')}</select>
+      <div class="relative flex-1 min-w-[230px] max-w-lg"><span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none">${icon('search', 'w-4 h-4')}</span>
+        <input id="m-q" type="search" class="input pl-10" placeholder="Cari nama, nomor peserta, kelas, atau sekolah" autocomplete="off" aria-label="Cari peserta" value="${esc(A.q)}"></div>
+      <span class="text-sm text-slate-400 flex items-center gap-2"><span class="pulse-dot"></span>Diperbarui tiap ${MONITOR_MS / 1000} detik</span></div>
+    <div id="m-stats" class="grid grid-cols-2 lg:grid-cols-4 gap-3"></div>
+    <div id="m-count" class="text-sm text-slate-400 min-h-[1.25rem]"></div>
+    <section class="panel p-4 overflow-x-auto"><table class="t"><thead><tr><th>Peserta</th><th>Sekolah / Kelas</th><th>Ujian</th><th>Pelanggaran</th><th>Status</th><th>Terakhir aktif</th><th></th></tr></thead><tbody id="m-body"><tr><td colspan="7" class="text-center text-slate-500 py-8">Memuat data...</td></tr></tbody></table></section></div>`;
+  paint();
+  $('#m-f').onchange = e => { A.filter = e.target.value; loadLogs(); };
+  $('#m-q').oninput = e => { A.q = e.target.value; drawLogs(); };               // hanya menggambar ulang tabel; kolom pencarian tidak disentuh saat data diperbarui
+  $('#m-q').onkeydown = e => { if (e.key === 'Escape') { e.target.value = ''; A.q = ''; drawLogs(); } };
+  loadLogs(); timers.mon = setInterval(loadLogs, MONITOR_MS);
+}
+let polling = false;
+async function loadLogs() {
+  if (polling) return; polling = true;                       // jangan menumpuk permintaan jika server sedang lambat
+  try { const r = await api('adminGetLogs', { token: S.token, idUjian: A.filter }); A.logs = r.logs; drawLogs(); }
+  catch (e) { if (/Sesi berakhir/.test(e.message)) { toast(e.message, 'warn'); logout(); } }
+  finally { polling = false; }
+}
+function drawLogs() {
+  const body = $('#m-body'); if (!body) return;
+  const all = A.logs, cnt = f => all.filter(f).length;
+  const cards = [['', 'Semua peserta', all.length, 'text-slate-100'], ['Sedang Mengerjakan', 'Sedang mengerjakan', cnt(x => x.status === 'Sedang Mengerjakan'), 'text-indigo-300'],
+                 ['Terkunci', 'Terkunci', cnt(x => x.status === 'Terkunci'), 'text-red-300'], ['Selesai', 'Selesai', cnt(isDone), 'text-emerald-300']];
+  $('#m-stats').innerHTML = cards.map(([k, l, v, c]) => `<button type="button" data-sf="${k}" aria-pressed="${A.sf === k}" class="panel p-4 text-left transition ${A.sf === k ? 'ring-2 ring-indigo-400' : 'hover:border-slate-500'}"><div class="text-3xl font-extrabold ${c}">${v}</div><div class="text-xs text-slate-400 mt-1">${l}</div></button>`).join('');
+  document.querySelectorAll('#m-stats [data-sf]').forEach(b => b.onclick = () => { A.sf = A.sf === b.dataset.sf ? '' : b.dataset.sf; drawLogs(); });
+
+  const q = norm(A.q).trim().replace(/\s+/g, ' '), terms = q ? q.split(' ') : [];
+  const hay = x => norm(`${x.nama} ${x.nomor} ${x.kelas} ${x.sekolah}`);
+  let L = all;
+  if (q) {                                                                    // frasa utuh diutamakan ("ipa 2" tidak ikut nomor 1002); jika kosong, cari per kata (urutan bebas)
+    const phrase = all.filter(x => hay(x).includes(q));
+    L = phrase.length ? phrase : all.filter(x => terms.every(t => hay(x).includes(t)));
+  }
+  if (A.sf) L = L.filter(x => A.sf === 'Selesai' ? isDone(x) : x.status === A.sf);
+  L.sort((a, b) => statusRank(a.status) - statusRank(b.status) || String(a.nama).localeCompare(String(b.nama), 'id'));   // terkunci paling atas
+  const filtered = terms.length > 0 || !!A.sf;
+  $('#m-count').innerHTML = filtered
+    ? `Menampilkan <b class="text-slate-200">${L.length}</b> dari ${all.length} peserta <button type="button" class="underline ml-2 text-indigo-300" id="m-clear">Hapus filter</button>`
+    : (all.length ? `Menampilkan ${all.length} peserta. Peserta terkunci ditampilkan paling atas.` : '');
+  const clr = $('#m-clear'); if (clr) clr.onclick = () => { A.q = ''; A.sf = ''; const q = $('#m-q'); if (q) q.value = ''; drawLogs(); };
+
+  const name = id => (A.exams.find(x => x.id === id) || {}).nama || id;
+  const ex = id => A.exams.find(x => x.id === id);
+  body.innerHTML = L.length ? L.map(x => {
+    const cls = x.status === 'Sedang Mengerjakan' ? 'b-run' : x.status === 'Terkunci' ? 'b-lock' : 'b-done';
+    const max = ex(x.idUjian) ? ex(x.idUjian).batas : '?';
+    return `<tr class="${x.status === 'Terkunci' ? 'bg-red-500/10' : ''}"><td><div class="font-semibold">${esc(x.nama)}</div><div class="text-xs text-slate-500">${esc(x.nomor)}</div></td><td>${esc(x.sekolah)}<div class="text-xs text-slate-500">${esc(x.kelas)}</div></td>
+    <td>${esc(name(x.idUjian))}</td><td><b class="${x.pelanggaran ? 'text-amber-300' : ''}">${x.pelanggaran}</b> / ${max}${x.terakhir ? `<div class="text-xs text-slate-500">${esc(x.terakhir)}</div>` : ''}</td>
+    <td><span class="badge ${cls}">${x.status === 'Sedang Mengerjakan' && x.online ? '<span class="pulse-dot" style="--c:#818CF8"></span>' : ''}${esc(x.status)}</span></td>
+    <td class="text-slate-400">${x.online ? 'Online' : fmtAgo(x.seenAgo)}</td>
+    <td class="text-right">${x.status === 'Terkunci' ? `<button class="btn btn-ghost btn-sm" data-un="${esc(x.idUjian)}|${esc(x.nomor)}">${icon('lock-open', 'w-4 h-4')} Buka kunci</button>` : ''}</td></tr>`;
+  }).join('') : `<tr><td colspan="7" class="text-center text-slate-500 py-8">${all.length ? 'Tidak ada peserta yang cocok dengan pencarian atau filter ini.' : 'Belum ada peserta yang memulai ujian.'}</td></tr>`;
+  paint();
+  body.querySelectorAll('[data-un]').forEach(b => b.onclick = async () => {
+    const [idUjian, nomor] = b.dataset.un.split('|');
+    const r = await ask({ title: 'Buka kunci peserta?', ic: 'lock-open', body: '<p>Pelanggaran peserta diatur ulang ke 0 dan ia bisa melanjutkan ujian. Lakukan hanya setelah memverifikasi langsung.</p>', actions: [{ id: 'no', label: 'Batal' }, { id: 'yes', label: 'Buka kunci', kind: 'btn-primary' }] });
+    if (r !== 'yes') return;
+    try { await api('adminUnlock', { token: S.token, idUjian, nomor }); toast('Kunci dibuka', 'ok'); loadLogs(); } catch (e) { toast(e.message, 'err'); }
+  });
+}
+const fmtAgo = s => s == null || s > 86400 * 30 ? '-' : s < 60 ? s + ' dtk lalu' : s < 3600 ? Math.floor(s / 60) + ' mnt lalu' : Math.floor(s / 3600) + ' jam lalu';
+
+/* ======================================================================
+ *  MODE DEMO (aktif jika API_URL kosong) - meniru perilaku Code.gs
+ *  Akun demo: siswa 1001 / siswa123 (SMA Nusantara); admin / admin123
+ * ====================================================================== */
+const demoDefault = () => ({
+  schools: ['SMA Nusantara', 'SMK Nusantara Jaya'],
+  siswa: [{ sekolah: 'SMA Nusantara', nama: 'Aisyah Putri', nomor: '1001', kelas: 'XII IPA 1', password: 'siswa123' },
+          { sekolah: 'SMK Nusantara Jaya', nama: 'Budi Santoso', nomor: '2001', kelas: 'XI TKJ 2', password: 'siswa123' }],
+  exams: [{ id: 'UJ-DEMO-1', sekolah: 'SMA Nusantara', nama: 'PAS Matematika Kelas 12', link: 'https://docs.google.com/forms/d/e/1FAIpQLSdemo/viewform?embedded=true', batas: 3, durasi: 60, status: 'Aktif', mulai: '', selesai: '', token: '' }],
+  logs: []
+});
+const D = JSON.parse(localStorage.getItem('cbt_demo') || 'null') || demoDefault();
+const dsave = () => localStorage.setItem('cbt_demo', JSON.stringify(D));
+function demoApi(a, p) { return new Promise((ok, no) => setTimeout(() => { try { ok(demoRun(a, p)); } catch (e) { no(e); } }, 220)); }
+function demoRun(a, p) {
+  const dMs = s => s ? new Date(s).getTime() : null;                       // demo: jadwal dibaca dalam zona waktu browser
+  const dState = (e, now = Date.now()) => calcState({ status: e.status, mulaiMs: dMs(e.mulai), selesaiMs: dMs(e.selesai) }, now);
+  const dPub = e => ({ id: e.id, sekolah: e.sekolah, nama: e.nama, batas: e.batas, durasi: e.durasi, status: e.status, state: dState(e), mulaiMs: dMs(e.mulai), selesaiMs: dMs(e.selesai), perluToken: !!e.token });
+  const dFull = e => ({ ...e, mulai: e.mulai || '', selesai: e.selesai || '', token: e.token || '', ...dPub(e) });
+  const meta = () => ({ serverNow: Date.now(), tz: Intl.DateTimeFormat().resolvedOptions().timeZone, tzLabel: '' });
+  const listFor = s => D.exams.filter(e => e.sekolah === s.sekolah && e.status === 'Aktif').map(dPub).filter(e => e.state !== 'Selesai');
+  const sUser = () => { const s = D.siswa.find(x => x.nomor === (p.token || '').split(':')[1]); if (!s) throw new Error('Sesi berakhir. Silakan login kembali.'); return s; };
+  const admin = () => { if (p.token !== 'demo-admin') throw new Error('Sesi berakhir. Silakan login kembali.'); };
+  const log = (id, no) => D.logs.find(l => l.idUjian === id && l.nomor === no);
+  const exam = id => D.exams.find(x => x.id === id);
+  const rem = (l, e) => { const sel = dMs(e.selesai); const end = sel != null && sel < l.endAt ? sel : l.endAt; return Math.max(0, Math.floor((end - Date.now()) / 1000)); };
+  const state = (l, e) => { if (l.status === 'Sedang Mengerjakan' && rem(l, e) <= 0) l.status = 'Selesai (Waktu Habis)'; l.seen = Date.now(); dsave();
+    return { status: l.status, violations: l.pelanggaran, remainingSec: rem(l, e), batas: e.batas, examActive: e.status === 'Aktif' }; };
+  switch (a) {
+    case 'ping': return { ok: true };
+    case 'schools': return { schools: D.schools };
+    case 'loginSiswa': { const s = D.siswa.find(x => x.sekolah === p.sekolah && x.nomor === String(p.nomor) && x.password === p.password);
+      if (!s) throw new Error('Nomor peserta atau password salah.');
+      return { token: 'demo-s:' + s.nomor, user: { nama: s.nama, kelas: s.kelas, sekolah: s.sekolah, nomor: s.nomor }, exams: listFor(s), ...meta() }; }
+    case 'getExams': return { exams: listFor(sUser()), ...meta() };
+    case 'startExam': { const s = sUser(), e = exam(p.idUjian); if (!e || e.sekolah !== s.sekolah) throw new Error('Ujian tidak ditemukan.');
+      const st = dState(e);
+      if (st === 'Nonaktif') throw new Error('Ujian sedang dinonaktifkan oleh admin.');
+      if (st === 'Terjadwal') throw new Error('Ujian belum dibuka.');
+      let l = log(e.id, s.nomor);
+      if (!l) {
+        if (st === 'Selesai') throw new Error('Waktu ujian sudah ditutup.');
+        if (e.token && String(e.token).toUpperCase() !== String(p.tokenUjian || '').trim().toUpperCase()) throw new Error('Token ujian salah.');
+        const cap = dMs(e.selesai) == null ? Infinity : dMs(e.selesai);
+        l = { idUjian: e.id, sekolah: s.sekolah, nomor: s.nomor, nama: s.nama, kelas: s.kelas, pelanggaran: 0, status: 'Sedang Mengerjakan', terakhir: '', endAt: Math.min(Date.now() + e.durasi * 60000, cap), seen: Date.now() }; D.logs.push(l);
+      }
+      const r = state(l, e); r.exam = { id: e.id, nama: e.nama, sekolah: e.sekolah, durasi: e.durasi }; if (r.status === 'Sedang Mengerjakan') r.link = normForm(e.link); return r; }
+    case 'heartbeat': { const s = sUser(), e = exam(p.idUjian), l = e && log(e.id, s.nomor); if (!l) throw new Error('Sesi ujian tidak ditemukan.');
+      if (l.status === 'Sedang Mengerjakan' && (p.clientViolations || 0) > l.pelanggaran) { l.pelanggaran = p.clientViolations; if (l.pelanggaran >= e.batas) l.status = 'Terkunci'; } return state(l, e); }
+    case 'violation': { const s = sUser(), e = exam(p.idUjian), l = e && log(e.id, s.nomor); if (!l) throw new Error('Sesi ujian tidak ditemukan.');
+      if (l.status === 'Sedang Mengerjakan') { l.pelanggaran = Math.max(l.pelanggaran + 1, p.clientViolations || 0); l.terakhir = p.type; if (l.pelanggaran >= e.batas) l.status = 'Terkunci'; } return state(l, e); }
+    case 'finish': { const s = sUser(), e = exam(p.idUjian), l = e && log(e.id, s.nomor); if (l && l.status === 'Sedang Mengerjakan') l.status = p.reason === 'timeout' ? 'Selesai (Waktu Habis)' : 'Selesai'; dsave(); return { status: l && l.status }; }
+    case 'loginAdmin': if (p.username !== 'admin' || p.password !== 'admin123') throw new Error('Username/NIP atau password salah.');
+      return { token: 'demo-admin', user: { nama: 'Bu Ratna (demo)', username: 'admin', sekolah: '*' } };
+    case 'adminMeta': admin(); return { schools: [...new Set([...D.schools, ...D.exams.map(e => e.sekolah)])].sort() };
+    case 'adminGetExams': admin(); return { exams: D.exams.map(dFull), schools: [...new Set([...D.schools, ...D.exams.map(e => e.sekolah)])].sort(), ...meta() };
+    case 'adminSaveExam': { admin(); const x = p.exam; if (!x.sekolah || !x.nama) throw new Error('Nama sekolah dan nama ujian wajib diisi.');
+      if (x.mulai && x.selesai && dMs(x.selesai) <= dMs(x.mulai)) throw new Error('Jadwal selesai harus setelah jadwal mulai.');
+      const token = String(x.token || '').toUpperCase().replace(/\s+/g, '');
+      if (token && !/^[A-Z0-9]{3,12}$/.test(token)) throw new Error('Token harus 3 sampai 12 karakter, hanya huruf dan angka.');
+      const rec = { id: x.id || 'UJ-' + Math.random().toString(36).slice(2, 6).toUpperCase(), sekolah: x.sekolah, nama: x.nama, link: normForm(x.link), batas: Math.max(1, x.batas | 0), durasi: Math.max(1, x.durasi | 0), status: x.status, mulai: x.mulai || '', selesai: x.selesai || '', token };
+      const i = D.exams.findIndex(e => e.id === rec.id); i >= 0 ? D.exams[i] = rec : D.exams.push(rec); dsave(); return { id: rec.id, exams: D.exams.map(dFull) }; }
+    case 'adminDeleteExam': admin(); D.exams = D.exams.filter(e => e.id !== p.id); dsave(); return { exams: D.exams.map(dFull) };
+    case 'adminGetLogs': admin(); return { logs: D.logs.filter(l => !p.idUjian || l.idUjian === p.idUjian).map(l => ({ ...l, online: Date.now() - l.seen < 30000, seenAgo: Math.round((Date.now() - l.seen) / 1000) })) };
+    case 'adminUnlock': { admin(); const l = log(p.idUjian, p.nomor); if (!l) throw new Error('Data tidak ditemukan.'); l.pelanggaran = 0; l.status = 'Sedang Mengerjakan'; dsave(); return {}; }
+  }
+  throw new Error('Aksi tidak dikenal');
+}
+
+/* ---------------------------- start ---------------------------- */
+(async function init() {
+  checkConn();
+  if (S && S.role === 'siswa') { viewSiswaDash(); refreshExams(); }
+  else if (S && S.role === 'admin') viewAdmin();
+  else viewGate();
+})();
+</script>
+</body>
+</html>
