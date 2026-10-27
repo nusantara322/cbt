@@ -1,5 +1,30 @@
+/**
+ * CBT NUSANTARA - Backend (Google Apps Script Web App)
+ * ------------------------------------------------------------------
+ * Deploy: Extensions > Apps Script > Deploy > New deployment > Web app
+ *   Execute as : Me
+ *   Who has access : Anyone
+ * Salin URL ".../exec" ke konstanta API_URL di index.html.
+ *
+ * Sheet yang dipakai (nama harus sama persis):
+ *   "Siswa"            : Nama Sekolah | Nama siswa | Nomor peserta | Kelas | Password
+ *   "Guru / Admin"     : Nama Sekolah | Nama Guru | Username / NIP | Password
+ *   "Pengaturan Ujian" : ID Ujian | Nama Sekolah | Nama Ujian | Link Google Form |
+ *                        Batas Pelanggaran | Durasi (Menit) | Status (Aktif/Nonaktif)
+ *   Kolom tambahan (dibuat otomatis saat admin menyimpan ujian, boleh juga ditambah manual):
+ *                        Jadwal Mulai | Jadwal Selesai | Token | Kelas   (format jadwal: yyyy-MM-dd HH:mm;
+ *                        Kelas: kosong = semua kelas; contoh "11", "XI IPA", "XI IPA 1, XI IPA 2")
+ *   "Log Ujian"        : dibuat otomatis oleh script ini
+ *
+ * Catatan:
+ *  - Kolom "Nama Sekolah" di sheet Guru boleh diisi SEMUA agar guru bisa
+ *    mengelola semua sekolah. Selain itu, guru hanya melihat sekolahnya sendiri.
+ *  - Password boleh teks biasa, atau hash dengan awalan "sha256:" (hex SHA-256).
+ *  - Link Google Form tidak pernah dikirim ke browser sebelum siswa login.
+ */
+
 const SS_ID = '1aYsogguasQCUQwNbbsHNS6ASU3calR6_XdZvxMxSHTQ';
-const SH = { SISWA: 'Siswa', ADMIN: 'Guru / Admin', EXAM: 'Pengaturan Ujian', LOG: 'Log Ujian', SOAL: 'Soal', JAWAB: 'Jawaban', IMG: 'Gambar' };
+const SH = { SISWA: 'Siswa', ADMIN: 'Guru / Admin', EXAM: 'Pengaturan Ujian', LOG: 'Log Ujian' };
 const TZ = 'Asia/Jakarta', TZ_LABEL = 'WIB';   // WITA: 'Asia/Makassar', WIT: 'Asia/Jayapura'. Semua jadwal memakai zona waktu ini.
 const SESSION_TTL = 6 * 60 * 60;   // detik (maksimum CacheService = 21600)
 const MAX_FAIL = 5;                // gagal login sebelum diblok sementara
@@ -34,10 +59,7 @@ const ACTIONS = {
   violation: violation_, finish: finish_,
   loginAdmin: loginAdmin_, adminMeta: adminMeta_, adminGetExams: adminGetExams_,
   adminSaveExam: adminSaveExam_, adminDeleteExam: adminDeleteExam_,
-  adminGetLogs: adminGetLogs_, adminUnlock: adminUnlock_, adminAddTime: adminAddTime_,
-  adminGetSoal: adminGetSoal_, adminSaveSoal: adminSaveSoal_, adminDeleteSoal: adminDeleteSoal_, adminReorderSoal: adminReorderSoal_,
-  adminUploadImage: adminUploadImage_, getImages: getImages_, saveAnswers: saveAnswers_,
-  adminGetHasil: adminGetHasil_, adminGetJawaban: adminGetJawaban_, adminNilaiEssay: adminNilaiEssay_
+  adminGetLogs: adminGetLogs_, adminUnlock: adminUnlock_, adminAddTime: adminAddTime_
 };
 
 /* ===================== UTIL ===================== */
@@ -112,8 +134,6 @@ function canonExamHeader_(h) {
   if (h.indexOf('link') > -1 || h.indexOf('form') > -1) return 'linkgoogleform';
   if (h.indexOf('batas') > -1 || h.indexOf('pelanggaran') > -1) return 'bataspelanggaran';
   if (h.indexOf('kelas') > -1) return 'kelas';
-  if (h.indexOf('sumber') > -1) return 'sumbersoal';
-  if (h.indexOf('opsi') > -1) return 'opsiujian';
   if (h.indexOf('mulai') > -1) return 'jadwalmulai';
   if (h.indexOf('selesai') > -1) return 'jadwalselesai';
   if (h.indexOf('token') > -1) return 'token';
@@ -180,8 +200,7 @@ function examPublic_(o) {
     id: str_(o.idujian), sekolah: str_(o.namasekolah), nama: str_(o.namaujian),
     batas: Number(o.bataspelanggaran) || 3, durasi: Number(o.durasimenit) || 60,
     status: isActive_(o) ? 'Aktif' : 'Nonaktif', state: examState_(o, Date.now()),
-    mulaiMs: a, selesaiMs: b, perluToken: str_(o.token) !== '', kelas: str_(o.kelas),
-    sumber: /internal/i.test(str_(o.sumbersoal)) ? 'internal' : 'form', opsiUjian: parseOpsiUjian_(o.opsiujian)            // token itu sendiri tidak pernah dikirim ke siswa
+    mulaiMs: a, selesaiMs: b, perluToken: str_(o.token) !== '', kelas: str_(o.kelas)            // token itu sendiri tidak pernah dikirim ke siswa
   };
 }
 
@@ -328,7 +347,6 @@ function startExam_(req) {
     if (ex.state === 'Terjadwal') throw new Error('Ujian belum dibuka. Jadwal mulai: ' + fmtSched_(ex.mulaiMs) + ' ' + TZ_LABEL + '.');
     let lg = findLog_(sh, ex.id, u.nomor);
     const now = new Date();
-    if (ex.sumber === 'internal' && !soalList_(ex.id).length) throw new Error('Ujian belum memiliki soal. Hubungi guru.');
     if (!lg) {                                                                // sesi baru: cek jadwal tutup dan token
       if (ex.state === 'Selesai') throw new Error('Waktu ujian sudah ditutup.');
       if (!kelasMatch_(ex.kelas, u.kelas)) throw new Error('Ujian ini bukan untuk kelas Anda.');
@@ -354,14 +372,7 @@ function startExam_(req) {
     sh.getRange(lg.row, L.SEEN + 1).setValue(now);
     const res = { ok: true, status: status, violations: st.violations, remainingSec: st.remainingSec,
       batas: ex.batas, exam: { id: ex.id, nama: ex.nama, sekolah: ex.sekolah, durasi: ex.durasi } };
-    if (status === 'Sedang Mengerjakan') {
-      if (ex.sumber === 'internal') {                                           // soal tampil di aplikasi: kirim soal TANPA kunci + jawaban tersimpan
-        const a = ensureAns_(ansSheet_(), ex.id, u);
-        res.mode = 'internal'; res.opsiUjian = ex.opsiUjian;
-        res.soal = soalUntukSiswa_(soalList_(ex.id), u.nomor + '|' + ex.id, ex.opsiUjian);
-        res.jawaban = parseJson_(a.vals[J.JAWAB], {}); res.ragu = parseJson_(a.vals[J.RAGU], []);
-      } else res.link = normalizeFormUrl_(ex.link);                              // link hanya untuk sesi aktif
-    }
+    if (status === 'Sedang Mengerjakan') res.link = normalizeFormUrl_(ex.link);   // link hanya untuk sesi aktif
     return res;
   });
 }
@@ -429,23 +440,15 @@ function violation_(req) {
 function finish_(req) {
   const u = session_(req.token, 'siswa');
   return withLock_(function () {
-    const idUjian = str_(req.idUjian);
-    const sh = logSheet_(), lg = findLog_(sh, idUjian, u.nomor);
+    const sh = logSheet_(), lg = findLog_(sh, str_(req.idUjian), u.nomor);
     if (!lg) throw new Error('Sesi ujian tidak ditemukan.');
-    const row = examRows_().find(function (r) { return str_(r.idujian) === idUjian; });
-    const ex = row ? examFull_(row) : null, internal = !!ex && ex.sumber === 'internal';
     let status = str_(lg.vals[L.STATUS]);
-    const running = status === 'Sedang Mengerjakan';
-    const grace = /Waktu Habis/.test(status) && internal && (Date.now() - effEnd_(lg.vals, ex.selesaiMs) <= 60000);   // jawaban terakhir saat waktu habis
-    if (internal && req.jawaban && (running || grace)) simpanJawaban_(idUjian, u, req.jawaban, req.ragu, true);
-    if (running) {
+    if (status === 'Sedang Mengerjakan') {
       status = req.reason === 'timeout' ? 'Selesai (Waktu Habis)' : 'Selesai';
       sh.getRange(lg.row, L.STATUS + 1).setValue(status);
     }
     sh.getRange(lg.row, L.SEEN + 1).setValue(new Date());
-    const res = { ok: true, status: status };
-    if (internal && ex.opsiUjian.tampilNilai) res.hasil = ringkasHasil_(idUjian, u.nomor);
-    return res;
+    return { ok: true, status: status };
   });
 }
 
@@ -472,10 +475,8 @@ function schoolsFor_(u) {
   return list;
 }
 function adminList_(u, rows) {
-  const cnt = soalCount_();
-  return rows.filter(function (r) { return allowed_(u, r.namasekolah); }).map(function (r) { const e = examFull_(r); e.jumlahSoal = cnt[e.id] || 0; return e; });
+  return rows.filter(function (r) { return allowed_(u, r.namasekolah); }).map(examFull_);
 }
-
 function adminMeta_(req) {
   const u = session_(req.token, 'admin');
   return { ok: true, schools: schoolsFor_(u) };
@@ -497,9 +498,7 @@ function adminSaveExam_(req) {
   let id = str_(e.id);
   if (id && !/^[A-Za-z0-9_-]{3,40}$/.test(id)) throw new Error('ID ujian tidak valid.');
   const batas = Math.max(1, parseInt(e.batas, 10) || 3), durasi = Math.max(1, parseInt(e.durasi, 10) || 60);
-  const internal = /^internal$/i.test(str_(e.sumber));
-  const link = internal ? '' : normalizeFormUrl_(e.link);                   // soal internal tidak memakai Google Form
-  const opsiUjian = parseOpsiUjian_(e.opsiUjian);
+  const link = normalizeFormUrl_(e.link);
   const status = /^aktif$/i.test(str_(e.status)) ? 'Aktif' : 'Nonaktif';
   const mulai = str_(e.mulai) ? parseSched_(str_(e.mulai)) : null, selesai = str_(e.selesai) ? parseSched_(str_(e.selesai)) : null;
   if ((str_(e.mulai) && mulai === null) || (str_(e.selesai) && selesai === null)) throw new Error('Format jadwal tidak valid.');
@@ -510,7 +509,7 @@ function adminSaveExam_(req) {
   if (kelas.length > 200) throw new Error('Daftar kelas terlalu panjang (maksimal 200 karakter).');
   return withLock_(function () {
     const t = examTable_();                                   // baca segar (bukan cache) sebelum menulis
-    [['jadwalmulai', 'Jadwal Mulai'], ['jadwalselesai', 'Jadwal Selesai'], ['token', 'Token'], ['kelas', 'Kelas'], ['sumbersoal', 'Sumber Soal'], ['opsiujian', 'Opsi Ujian']].forEach(function (c) {
+    [['jadwalmulai', 'Jadwal Mulai'], ['jadwalselesai', 'Jadwal Selesai'], ['token', 'Token'], ['kelas', 'Kelas']].forEach(function (c) {
       if (t.headers.indexOf(c[0]) < 0) { t.sh.getRange(1, t.headers.length + 1).setValue(c[1]); t.headers.push(c[0]); }   // tambah kolom bila belum ada
     });
     const existing = id ? t.rows.find(function (r) { return str_(r.idujian) === id; }) : null;
@@ -518,12 +517,11 @@ function adminSaveExam_(req) {
     if (!id) id = 'UJ-' + Utilities.formatDate(new Date(), TZ, 'yyMMdd') + '-' + Utilities.getUuid().slice(0, 4).toUpperCase();
     const values = { idujian: id, namasekolah: sekolah, namaujian: nama, linkgoogleform: link,
       bataspelanggaran: batas, durasimenit: durasi, statusaktifnonaktif: status,
-      jadwalmulai: fmtSched_(mulai), jadwalselesai: fmtSched_(selesai), token: token, kelas: kelas,
-      sumbersoal: internal ? 'Soal Internal' : 'Google Form', opsiujian: JSON.stringify(opsiUjian) };
+      jadwalmulai: fmtSched_(mulai), jadwalselesai: fmtSched_(selesai), token: token, kelas: kelas };
     const line = t.headers.map(function (h) { return values[h] !== undefined ? values[h] : ''; });
     const target = existing ? existing._row : t.sh.getLastRow() + 1;
     t.headers.forEach(function (h, i) {                       // jadwal dan token disimpan sebagai teks (tanpa konversi otomatis Sheets)
-      if (h === 'jadwalmulai' || h === 'jadwalselesai' || h === 'token' || h === 'kelas' || h === 'sumbersoal' || h === 'opsiujian') t.sh.getRange(target, i + 1).setNumberFormat('@');
+      if (h === 'jadwalmulai' || h === 'jadwalselesai' || h === 'token' || h === 'kelas') t.sh.getRange(target, i + 1).setNumberFormat('@');
     });
     t.sh.getRange(target, 1, 1, line.length).setValues([line]);
     const rec = Object.assign({ _row: target }, values);
@@ -610,415 +608,5 @@ function adminUnlock_(req) {
     sh.getRange(lg.row, L.STATUS + 1).setValue('Sedang Mengerjakan');
     sh.getRange(lg.row, L.HIST + 1).setValue(hist);
     return { ok: true };
-  });
-}
-
-/* ===== INTI SOAL INTERNAL: fungsi murni (sama persis di server dan mode demo) ===== */
-function parseJson_(v, d) { try { const x = JSON.parse(String(v)); return x === undefined || x === null ? d : x; } catch (e) { return d; } }
-function hashStr_(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
-function rng_(seed) {
-  let a = seed >>> 0;
-  return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
-}
-function shuffle_(arr, seedStr) {                                   // acak tetap: peserta yang sama selalu mendapat urutan yang sama
-  const a = arr.slice(), r = rng_(hashStr_(seedStr));
-  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)), t = a[i]; a[i] = a[j]; a[j] = t; }
-  return a;
-}
-function parseOpsiUjian_(v) {
-  const o = (v && typeof v === 'object') ? v : parseJson_(v, {});
-  return { acakSoal: !!o.acakSoal, acakOpsi: !!o.acakOpsi, tampilNilai: o.tampilNilai === undefined ? true : !!o.tampilNilai };
-}
-const IMG_RE_ = /^IMG-[A-Za-z0-9]{4,30}$/;
-
-/* Validasi soal dari guru. Mengembalikan soal bersih atau melempar pesan galat yang jelas. */
-function cleanSoal_(s) {
-  const jenis = str_(s.jenis).toUpperCase();
-  if (['PG', 'PGK', 'BS', 'ESSAY'].indexOf(jenis) < 0) throw new Error('Jenis soal tidak valid.');
-  const teks = String(s.teks === undefined || s.teks === null ? '' : s.teks).slice(0, 4000), gambar = str_(s.gambar);
-  if (gambar && !IMG_RE_.test(gambar)) throw new Error('Gambar tidak valid.');
-  if (!teks.trim() && !gambar) throw new Error('Isi pertanyaan atau tambahkan gambar.');
-  let bobot = Number(s.bobot);
-  if (!(bobot > 0 && bobot <= 100)) throw new Error('Bobot harus lebih dari 0 dan paling banyak 100.');
-  bobot = Math.round(bobot * 100) / 100;
-  let opsi = [], kunci = null, aturan = '';
-  if (jenis === 'ESSAY') kunci = String(s.kunci === undefined || s.kunci === null ? '' : s.kunci).slice(0, 2000);
-  else {
-    const src = Array.isArray(s.opsi) ? s.opsi : [], bs = jenis === 'BS', seen = {};
-    if (src.length < (bs ? 1 : 2) || src.length > (bs ? 10 : 8)) throw new Error(bs ? 'Jumlah pernyataan Benar/Salah harus 1 sampai 10.' : 'Jumlah pilihan jawaban harus 2 sampai 8.');
-    opsi = src.map(function (o) {
-      const id = str_(o.id), t = String(o.t === undefined || o.t === null ? '' : o.t).slice(0, 1000), g = str_(o.g);
-      if (!(bs ? /^s([1-9]|10)$/ : /^[a-h]$/).test(id) || seen[id]) throw new Error('ID pilihan tidak valid.');
-      seen[id] = 1;
-      if (g && !IMG_RE_.test(g)) throw new Error('Gambar pilihan tidak valid.');
-      if (!t.trim() && !g) throw new Error(bs ? 'Setiap pernyataan harus berisi teks atau gambar.' : 'Setiap pilihan harus berisi teks atau gambar.');
-      return { id: id, t: t, g: g };
-    });
-    if (jenis === 'PG') {
-      if (!seen[str_(s.kunci)]) throw new Error('Pilih satu kunci jawaban.');
-      kunci = str_(s.kunci);
-    } else if (jenis === 'PGK') {
-      const k = (Array.isArray(s.kunci) ? s.kunci : []).map(str_).filter(function (x, i, a) { return a.indexOf(x) === i; });
-      if (!k.length || k.some(function (x) { return !seen[x]; })) throw new Error('Pilih minimal satu kunci jawaban.');
-      kunci = k.sort(); aturan = s.aturan === 'sebagian' ? 'sebagian' : 'semua';
-    } else {
-      const k = s.kunci && typeof s.kunci === 'object' ? s.kunci : {};
-      kunci = {};
-      opsi.forEach(function (o) { if (k[o.id] !== 'B' && k[o.id] !== 'S') throw new Error('Tentukan Benar atau Salah untuk setiap pernyataan.'); kunci[o.id] = k[o.id]; });
-      aturan = s.aturan === 'semua' ? 'semua' : 'per';
-    }
-  }
-  return { jenis: jenis, teks: teks, gambar: gambar, opsi: opsi, kunci: kunci, bobot: bobot, aturan: aturan };
-}
-
-/* Jawaban dari peserta dibersihkan menurut jenis soal; yang tidak valid dibuang. */
-function cleanAnswers_(soal, raw) {
-  const out = {}; raw = raw && typeof raw === 'object' ? raw : {};
-  soal.forEach(function (q) {
-    const a = raw[q.id]; if (a === undefined || a === null) return;
-    const ids = (q.opsi || []).map(function (o) { return o.id; });
-    if (q.jenis === 'PG') { if (ids.indexOf(String(a)) > -1) out[q.id] = String(a); }
-    else if (q.jenis === 'PGK') {
-      const sel = (Array.isArray(a) ? a : []).map(String).filter(function (x, i, arr) { return ids.indexOf(x) > -1 && arr.indexOf(x) === i; });
-      if (sel.length) out[q.id] = sel.sort();
-    } else if (q.jenis === 'BS') {
-      const m = {}; ids.forEach(function (id) { if (a[id] === 'B' || a[id] === 'S') m[id] = a[id]; });
-      if (Object.keys(m).length) out[q.id] = m;
-    } else if (q.jenis === 'ESSAY') { const t = String(a).slice(0, 1500); if (t.trim()) out[q.id] = t; }
-  });
-  return out;
-}
-
-/* Penilaian satu soal otomatis (essay dinilai guru). */
-function gradeSoal_(q, ans) {
-  const maks = Number(q.bobot) || 0;
-  if (q.jenis === 'ESSAY') return { poin: null, maks: maks, status: 'menunggu' };
-  const kosong = ans === undefined || ans === null || ans === '' || (Array.isArray(ans) && !ans.length) || (typeof ans === 'object' && !Array.isArray(ans) && !Object.keys(ans).length);
-  if (kosong) return { poin: 0, maks: maks, status: 'kosong' };
-  let frac = 0;
-  if (q.jenis === 'PG') frac = String(ans) === String(q.kunci) ? 1 : 0;
-  else if (q.jenis === 'PGK') {
-    const key = q.kunci || [], sel = Array.isArray(ans) ? ans : [];
-    const ok = sel.filter(function (x) { return key.indexOf(x) > -1; }).length, bad = sel.length - ok;
-    frac = q.aturan === 'sebagian' ? Math.max(0, (ok - bad) / key.length) : (ok === key.length && bad === 0 ? 1 : 0);
-  } else if (q.jenis === 'BS') {
-    const ids = (q.opsi || []).map(function (o) { return o.id; }), key = q.kunci || {};
-    const ok = ids.filter(function (id) { return ans[id] && ans[id] === key[id]; }).length;
-    frac = q.aturan === 'semua' ? (ok === ids.length ? 1 : 0) : ok / ids.length;
-  }
-  return { poin: Math.round(frac * maks * 100) / 100, maks: maks, status: frac === 1 ? 'benar' : frac > 0 ? 'sebagian' : 'salah' };
-}
-
-/* Rekap nilai satu peserta: skor otomatis + skor essay dari guru. */
-function hitung_(soal, ans, essay) {
-  let auto = 0, ess = 0, maks = 0, belum = 0;
-  const detail = soal.map(function (q) {
-    const g = gradeSoal_(q, ans[q.id]);
-    maks += g.maks;
-    if (q.jenis === 'ESSAY') {
-      const a = String(ans[q.id] || '').trim(), sv = essay ? essay[q.id] : undefined;
-      if (sv !== undefined && sv !== null && sv !== '') { const p = Math.min(g.maks, Math.max(0, Number(sv) || 0)); ess += p; return { id: q.id, poin: p, maks: g.maks, status: 'dinilai' }; }
-      if (a) { belum++; return { id: q.id, poin: null, maks: g.maks, status: 'menunggu' }; }
-      return { id: q.id, poin: 0, maks: g.maks, status: 'kosong' };
-    }
-    auto += g.poin;
-    return { id: q.id, poin: g.poin, maks: g.maks, status: g.status };
-  });
-  const r2 = function (x) { return Math.round(x * 100) / 100; }, total = r2(auto + ess);
-  return { auto: r2(auto), essay: r2(ess), total: total, maks: r2(maks), nilai: maks ? Math.round(total / maks * 1000) / 10 : 0, belum: belum, detail: detail };
-}
-
-/* Soal yang dikirim ke peserta: tanpa kunci, tanpa pedoman; urutan diacak bila diminta. */
-function soalUntukSiswa_(soal, seed, op) {
-  let list = soal.slice();
-  if (op && op.acakSoal) list = shuffle_(list, seed + '|q');
-  return list.map(function (q) {
-    let opsi = q.opsi || [];
-    if (op && op.acakOpsi && (q.jenis === 'PG' || q.jenis === 'PGK')) opsi = shuffle_(opsi, seed + '|o|' + q.id);
-    return { id: q.id, jenis: q.jenis, teks: q.teks, gambar: q.gambar, opsi: opsi.map(function (o) { return { id: o.id, t: o.t, g: o.g }; }) };
-  });
-}
-
-
-/* ===================== SOAL INTERNAL: PENYIMPANAN ===================== */
-const SOAL_HEADERS = ['ID Soal', 'ID Ujian', 'Urutan', 'Jenis', 'Pertanyaan', 'Gambar', 'Opsi', 'Kunci', 'Bobot', 'Aturan', 'Diubah'];
-const Q = { ID: 0, UJIAN: 1, URUT: 2, JENIS: 3, TEKS: 4, IMG: 5, OPSI: 6, KUNCI: 7, BOBOT: 8, ATURAN: 9, UBAH: 10 };
-const JAWAB_HEADERS = ['ID Ujian', 'Nomor Peserta', 'Nama', 'Kelas', 'Sekolah', 'Jawaban', 'Ragu', 'Skor Essay', 'Diperbarui'];
-const J = { UJIAN: 0, NO: 1, NAMA: 2, KELAS: 3, SEKOLAH: 4, JAWAB: 5, RAGU: 6, ESSAY: 7, UBAH: 8 };
-const IMG_HEADERS = ['ID Gambar', 'Jenis', 'Bagian', 'Data', 'Dibuat'];
-const IMG_CHUNK = 45000;                        // batas sel Google Sheets 50.000 karakter
-
-/* Semua sel di sheet ini berformat teks: isi soal/jawaban yang diawali "=" tidak pernah dijalankan sebagai rumus. */
-function ensureSheet_(name, headers) {
-  let sh = ss_().getSheetByName(name);
-  if (!sh) {
-    sh = ss_().insertSheet(name);
-    sh.getRange(1, 1, sh.getMaxRows(), headers.length).setNumberFormat('@');
-    sh.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold').setBackground('#E0E7FF');
-    sh.setFrozenRows(1);
-  }
-  return sh;
-}
-function cachePutBig_(key, str, ttl) {
-  const n = Math.ceil(str.length / 90000), o = {};
-  for (let i = 0; i < n; i++) o[key + '#' + i] = str.slice(i * 90000, (i + 1) * 90000);
-  o[key + '#n'] = String(n);
-  try { CacheService.getScriptCache().putAll(o, ttl); } catch (e) { /* terlalu besar: abaikan */ }
-}
-function cacheGetBig_(key) {
-  const c = CacheService.getScriptCache(), n = Number(c.get(key + '#n'));
-  if (!n) return null;
-  const keys = []; for (let i = 0; i < n; i++) keys.push(key + '#' + i);
-  const o = c.getAll(keys); let s = '';
-  for (let i = 0; i < n; i++) { const p = o[key + '#' + i]; if (p === undefined || p === null) return null; s += p; }
-  return s;
-}
-function cacheDelBig_(key) {
-  const c = CacheService.getScriptCache(), n = Number(c.get(key + '#n')) || 0, ks = [key + '#n'];
-  for (let i = 0; i < n; i++) ks.push(key + '#' + i);
-  c.removeAll(ks);
-}
-
-function soalList_(idUjian) {
-  const ck = 'soal_' + idUjian, hit = cacheGetBig_(ck);
-  if (hit) return JSON.parse(hit);
-  const sh = ensureSheet_(SH.SOAL, SOAL_HEADERS);
-  const v = sh.getLastRow() > 1 ? sh.getRange(2, 1, sh.getLastRow() - 1, SOAL_HEADERS.length).getValues() : [];
-  const list = v.filter(function (r) { return str_(r[Q.UJIAN]) === idUjian; }).map(function (r) {
-    return { id: str_(r[Q.ID]), jenis: str_(r[Q.JENIS]), urut: Number(r[Q.URUT]) || 0, teks: String(r[Q.TEKS] || ''), gambar: str_(r[Q.IMG]),
-      opsi: parseJson_(r[Q.OPSI], []), kunci: parseJson_(r[Q.KUNCI], null), bobot: Number(r[Q.BOBOT]) || 1, aturan: str_(r[Q.ATURAN]) };
-  }).sort(function (a, b) { return a.urut - b.urut; });
-  cachePutBig_(ck, JSON.stringify(list), 600);
-  return list;
-}
-function bustSoal_(idUjian) { cacheDelBig_('soal_' + idUjian); CacheService.getScriptCache().remove('soalCount'); }
-function soalCount_() {
-  const c = CacheService.getScriptCache(), hit = c.get('soalCount');
-  if (hit) return JSON.parse(hit);
-  const sh = ss_().getSheetByName(SH.SOAL), m = {};
-  if (sh && sh.getLastRow() > 1) sh.getRange(2, Q.UJIAN + 1, sh.getLastRow() - 1, 1).getValues().forEach(function (r) { const k = str_(r[0]); if (k) m[k] = (m[k] || 0) + 1; });
-  c.put('soalCount', JSON.stringify(m), 60);
-  return m;
-}
-function examGuard_(u, idUjian) {
-  const row = examRows_().find(function (r) { return str_(r.idujian) === str_(idUjian); });
-  if (!row) throw new Error('Ujian tidak ditemukan.');
-  if (!allowed_(u, row.namasekolah)) throw new Error('Akses ditolak.');
-  return row;
-}
-function soalPayload_(idUjian) {
-  const row = examRows_().find(function (r) { return str_(r.idujian) === idUjian; }), e = row ? examPublic_(row) : {};
-  return { soal: soalList_(idUjian), ujian: { id: idUjian, nama: e.nama || '', sumber: e.sumber, opsiUjian: e.opsiUjian } };
-}
-
-/* ===================== SOAL INTERNAL: AKSI GURU ===================== */
-function adminGetSoal_(req) {
-  const u = session_(req.token, 'admin'); examGuard_(u, req.idUjian);
-  const p = soalPayload_(str_(req.idUjian)); p.ok = true; return p;
-}
-function adminSaveSoal_(req) {
-  const u = session_(req.token, 'admin'), idUjian = str_(req.idUjian); examGuard_(u, idUjian);
-  const src = req.soal || {}, c = cleanSoal_(src);
-  let id = str_(src.id);
-  if (id && !/^[A-Za-z0-9_-]{3,40}$/.test(id)) throw new Error('ID soal tidak valid.');
-  return withLock_(function () {
-    const sh = ensureSheet_(SH.SOAL, SOAL_HEADERS), last = sh.getLastRow();
-    const v = last > 1 ? sh.getRange(2, 1, last - 1, SOAL_HEADERS.length).getValues() : [];
-    let idx = -1, maxUrut = 0;
-    v.forEach(function (r, i) {
-      if (str_(r[Q.UJIAN]) === idUjian) maxUrut = Math.max(maxUrut, Number(r[Q.URUT]) || 0);
-      if (id && str_(r[Q.ID]) === id) { if (str_(r[Q.UJIAN]) !== idUjian) throw new Error('ID soal sudah dipakai.'); idx = i; }
-    });
-    if (!id) id = 'Q-' + Date.now().toString(36).toUpperCase() + Utilities.getUuid().slice(0, 3).toUpperCase();
-    const urut = idx >= 0 ? (Number(v[idx][Q.URUT]) || maxUrut) : maxUrut + 1;
-    const line = [id, idUjian, urut, c.jenis, c.teks, c.gambar, JSON.stringify(c.opsi), JSON.stringify(c.kunci), c.bobot, c.aturan, stamp_()];
-    sh.getRange(idx >= 0 ? idx + 2 : last + 1, 1, 1, line.length).setValues([line]);
-    bustSoal_(idUjian);
-    const p = soalPayload_(idUjian); p.ok = true; p.id = id; return p;
-  });
-}
-function adminDeleteSoal_(req) {
-  const u = session_(req.token, 'admin'), idUjian = str_(req.idUjian); examGuard_(u, idUjian);
-  return withLock_(function () {
-    const sh = ensureSheet_(SH.SOAL, SOAL_HEADERS), last = sh.getLastRow();
-    const v = last > 1 ? sh.getRange(2, 1, last - 1, SOAL_HEADERS.length).getValues() : [];
-    for (let i = 0; i < v.length; i++) if (str_(v[i][Q.ID]) === str_(req.id) && str_(v[i][Q.UJIAN]) === idUjian) { sh.deleteRow(i + 2); break; }
-    bustSoal_(idUjian);
-    const p = soalPayload_(idUjian); p.ok = true; return p;                  // idempoten
-  });
-}
-function adminReorderSoal_(req) {
-  const u = session_(req.token, 'admin'), idUjian = str_(req.idUjian); examGuard_(u, idUjian);
-  const order = (Array.isArray(req.ids) ? req.ids : []).map(str_);
-  return withLock_(function () {
-    const sh = ensureSheet_(SH.SOAL, SOAL_HEADERS), last = sh.getLastRow();
-    if (last > 1) {
-      const v = sh.getRange(2, 1, last - 1, SOAL_HEADERS.length).getValues(), urut = v.map(function (r) { return [r[Q.URUT]]; });
-      const mine = []; v.forEach(function (r, i) { if (str_(r[Q.UJIAN]) === idUjian) mine.push({ i: i, id: str_(r[Q.ID]), u: Number(r[Q.URUT]) || 0 }); });
-      mine.sort(function (a, b) { const x = order.indexOf(a.id), y = order.indexOf(b.id); return (x < 0 ? 1e6 + a.u : x) - (y < 0 ? 1e6 + b.u : y); });
-      mine.forEach(function (m, k) { urut[m.i] = [k + 1]; });
-      sh.getRange(2, Q.URUT + 1, urut.length, 1).setValues(urut);
-    }
-    bustSoal_(idUjian);
-    const p = soalPayload_(idUjian); p.ok = true; return p;
-  });
-}
-
-/* ===================== GAMBAR (disimpan di sheet "Gambar", tidak pernah dibuka untuk umum) ===================== */
-function adminUploadImage_(req) {
-  session_(req.token, 'admin');
-  const mime = str_(req.mime).toLowerCase(), data = String(req.data || '');
-  if (['image/jpeg', 'image/png', 'image/webp'].indexOf(mime) < 0) throw new Error('Format gambar harus JPG, PNG, atau WebP.');
-  if (!/^[A-Za-z0-9+\/=]+$/.test(data)) throw new Error('Data gambar tidak valid.');
-  if (data.length > 420000) throw new Error('Gambar terlalu besar. Perkecil gambar lalu coba lagi.');
-  const id = 'IMG-' + Date.now().toString(36).toUpperCase() + Utilities.getUuid().replace(/-/g, '').slice(0, 4).toUpperCase();
-  const rows = [];
-  for (let i = 0, p = 0; i < data.length; i += IMG_CHUNK, p++) rows.push([id, mime, p, data.slice(i, i + IMG_CHUNK), stamp_()]);
-  withLock_(function () {
-    const sh = ensureSheet_(SH.IMG, IMG_HEADERS);
-    sh.getRange(sh.getLastRow() + 1, 1, rows.length, IMG_HEADERS.length).setValues(rows);
-  });
-  return { ok: true, id: id };
-}
-function imageData_(id) {
-  const ck = 'img_' + id, hit = cacheGetBig_(ck);
-  if (hit) return JSON.parse(hit);
-  const sh = ss_().getSheetByName(SH.IMG);
-  if (!sh || sh.getLastRow() < 2) return null;
-  const col = sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues(), at = [];
-  col.forEach(function (r, i) { if (str_(r[0]) === id) at.push(i + 2); });
-  if (!at.length) return null;
-  const first = at[0], vals = sh.getRange(first, 1, at[at.length - 1] - first + 1, 4).getValues()
-    .filter(function (r) { return str_(r[0]) === id; }).sort(function (a, b) { return Number(a[2]) - Number(b[2]); });
-  const obj = { mime: str_(vals[0][1]), data: vals.map(function (r) { return String(r[3]); }).join('') };
-  cachePutBig_(ck, JSON.stringify(obj), 21600);
-  return obj;
-}
-function imageIdsOf_(soal) {
-  const m = {};
-  soal.forEach(function (q) { if (q.gambar) m[q.gambar] = 1; (q.opsi || []).forEach(function (o) { if (o.g) m[o.g] = 1; }); });
-  return m;
-}
-/* Guru: gambar apa pun. Peserta: hanya gambar milik ujian yang sudah ia mulai. */
-function getImages_(req) {
-  const raw = req.token && CacheService.getScriptCache().get('tok_' + req.token);
-  if (!raw) throw new Error('Sesi berakhir. Silakan login kembali.');
-  const s = JSON.parse(raw);
-  const ids = (Array.isArray(req.ids) ? req.ids : []).map(str_).filter(function (x) { return IMG_RE_.test(x); }).slice(0, 8);
-  let okIds = null;
-  if (s.role === 'siswa') {
-    const idUjian = str_(req.idUjian), row = examRows_().find(function (r) { return str_(r.idujian) === idUjian; });
-    if (!row || !same_(row.namasekolah, s.sekolah) || !findLog_(logSheet_(), idUjian, s.nomor)) throw new Error('Akses ditolak.');
-    okIds = imageIdsOf_(soalList_(idUjian));
-  } else if (s.role !== 'admin') throw new Error('Akses ditolak.');
-  const out = {};
-  ids.forEach(function (id) {
-    if (okIds && !okIds[id]) return;
-    const im = imageData_(id); if (im) out[id] = 'data:' + im.mime + ';base64,' + im.data;
-  });
-  return { ok: true, images: out };
-}
-
-/* ===================== JAWABAN PESERTA ===================== */
-function ansSheet_() { return ensureSheet_(SH.JAWAB, JAWAB_HEADERS); }
-function findAns_(sh, idUjian, no) {
-  const c = CacheService.getScriptCache(), key = 'arow_' + idUjian + '_' + no, w = JAWAB_HEADERS.length, hint = Number(c.get(key)) || 0;
-  if (hint > 1 && hint <= sh.getLastRow()) {
-    const vals = sh.getRange(hint, 1, 1, w).getValues()[0];
-    if (str_(vals[J.UJIAN]) === idUjian && str_(vals[J.NO]) === no) return { row: hint, vals: vals };
-  }
-  const last = sh.getLastRow(); if (last < 2) return null;
-  const v = sh.getRange(2, 1, last - 1, w).getValues();
-  for (let i = 0; i < v.length; i++)
-    if (str_(v[i][J.UJIAN]) === idUjian && str_(v[i][J.NO]) === no) { c.put(key, String(i + 2), 21600); return { row: i + 2, vals: v[i] }; }
-  return null;
-}
-function ensureAns_(sh, idUjian, u) {                                       // panggil di dalam lock
-  let a = findAns_(sh, idUjian, u.nomor);
-  if (!a) {
-    const line = [idUjian, u.nomor, u.nama, u.kelas, u.sekolah, '{}', '[]', '{}', stamp_()];
-    sh.getRange(sh.getLastRow() + 1, 1, 1, line.length).setValues([line]);
-    a = findAns_(sh, idUjian, u.nomor);
-  }
-  return a;
-}
-function simpanJawaban_(idUjian, u, jawaban, ragu, locked) {
-  const soal = soalList_(idUjian), json = JSON.stringify(cleanAnswers_(soal, jawaban));
-  if (json.length > 45000) throw new Error('Jawaban terlalu panjang. Persingkat jawaban essay.');
-  const rg = (Array.isArray(ragu) ? ragu : []).map(String).filter(function (id) { return soal.some(function (q) { return q.id === id; }); }).slice(0, 300);
-  const sh = ansSheet_();
-  let a = findAns_(sh, idUjian, u.nomor);
-  if (!a) a = locked ? ensureAns_(sh, idUjian, u) : withLock_(function () { return ensureAns_(sh, idUjian, u); });
-  sh.getRange(a.row, J.JAWAB + 1, 1, 2).setValues([[json, JSON.stringify(rg)]]);
-  sh.getRange(a.row, J.UBAH + 1).setValue(stamp_());
-}
-function saveAnswers_(req) {
-  const u = session_(req.token, 'siswa'), idUjian = str_(req.idUjian);
-  const row = examRows_().find(function (r) { return str_(r.idujian) === idUjian; });
-  if (!row || !same_(row.namasekolah, u.sekolah)) throw new Error('Ujian tidak ditemukan.');
-  const ex = examPublic_(row), sh = logSheet_(), lg = findLog_(sh, idUjian, u.nomor);
-  if (!lg) throw new Error('Sesi ujian tidak ditemukan.');
-  const st = logState_(lg.vals, ex.selesaiMs);
-  if (ex.sumber !== 'internal' || st.status !== 'Sedang Mengerjakan' || st.remainingSec <= 0) return { ok: true, status: st.status, disimpan: false };
-  simpanJawaban_(idUjian, u, req.jawaban, req.ragu, false);
-  sh.getRange(lg.row, L.SEEN + 1).setValue(new Date());
-  return { ok: true, status: st.status, disimpan: true, jam: Date.now() };
-}
-function ringkasHasil_(idUjian, nomor) {                                    // ringkasan untuk peserta (tanpa essay)
-  const soal = soalList_(idUjian), a = findAns_(ansSheet_(), idUjian, nomor), ans = a ? parseJson_(a.vals[J.JAWAB], {}) : {};
-  const ess = soal.filter(function (q) { return q.jenis === 'ESSAY'; }), h = hitung_(soal.filter(function (q) { return q.jenis !== 'ESSAY'; }), ans, {});
-  return { poin: h.auto, maks: h.maks, nilai: h.nilai, adaEssay: ess.length > 0, maksEssay: ess.reduce(function (s, q) { return s + q.bobot; }, 0) };
-}
-
-/* ===================== HASIL & PENILAIAN ESSAY (guru) ===================== */
-function ansRowsOf_(idUjian) {
-  const sh = ansSheet_(), last = sh.getLastRow();
-  return last > 1 ? sh.getRange(2, 1, last - 1, JAWAB_HEADERS.length).getValues().filter(function (r) { return str_(r[J.UJIAN]) === idUjian; }) : [];
-}
-function adminGetHasil_(req) {
-  const u = session_(req.token, 'admin'), idUjian = str_(req.idUjian), row = examGuard_(u, idUjian), soal = soalList_(idUjian);
-  const lsh = logSheet_(), lv = lsh.getLastRow() > 1 ? lsh.getRange(2, 1, lsh.getLastRow() - 1, LOG_HEADERS.length).getValues() : [], logBy = {};
-  lv.forEach(function (r) { if (str_(r[L.ID]) === idUjian) logBy[str_(r[L.NO])] = r; });
-  const stat = {}; soal.forEach(function (q) { stat[q.id] = { benar: 0, sebagian: 0, salah: 0, kosong: 0, menunggu: 0, dinilai: 0, n: 0 }; });
-  const rows = ansRowsOf_(idUjian).map(function (r) {
-    const no = str_(r[J.NO]), h = hitung_(soal, parseJson_(r[J.JAWAB], {}), parseJson_(r[J.ESSAY], {})), lg = logBy[no];
-    h.detail.forEach(function (d) { const s = stat[d.id]; if (s) { s.n++; if (s[d.status] !== undefined) s[d.status]++; } });
-    return { nomor: no, nama: str_(r[J.NAMA]), kelas: str_(r[J.KELAS]), sekolah: str_(r[J.SEKOLAH]), status: lg ? str_(lg[L.STATUS]) : '-',
-      pelanggaran: lg ? Number(lg[L.VIO]) || 0 : 0, auto: h.auto, essay: h.essay, belum: h.belum, total: h.total, maks: h.maks, nilai: h.nilai,
-      poinSoal: h.detail.map(function (d) { return d.poin; }) };
-  });
-  return { ok: true, ujian: { id: idUjian, nama: str_(row.namaujian) },
-    soal: soal.map(function (q, i) { return { id: q.id, no: i + 1, jenis: q.jenis, teks: q.teks.slice(0, 160), bobot: q.bobot, stat: stat[q.id] }; }), rows: rows };
-}
-function adminGetJawaban_(req) {
-  const u = session_(req.token, 'admin'), idUjian = str_(req.idUjian), nomor = str_(req.nomor); examGuard_(u, idUjian);
-  const soal = soalList_(idUjian), a = findAns_(ansSheet_(), idUjian, nomor);
-  if (!a) throw new Error('Jawaban peserta tidak ditemukan.');
-  const ans = parseJson_(a.vals[J.JAWAB], {}), es = parseJson_(a.vals[J.ESSAY], {}), h = hitung_(soal, ans, es);
-  return { ok: true, peserta: { nomor: nomor, nama: str_(a.vals[J.NAMA]), kelas: str_(a.vals[J.KELAS]) },
-    ringkas: { auto: h.auto, essay: h.essay, total: h.total, maks: h.maks, nilai: h.nilai, belum: h.belum },
-    detail: soal.map(function (q, i) {
-      return { no: i + 1, id: q.id, jenis: q.jenis, teks: q.teks, gambar: q.gambar, opsi: q.opsi, kunci: q.kunci, aturan: q.aturan, bobot: q.bobot,
-        jawaban: ans[q.id] === undefined ? null : ans[q.id], poin: h.detail[i].poin, status: h.detail[i].status, skorEssay: es[q.id] === undefined ? null : es[q.id] };
-    }) };
-}
-function adminNilaiEssay_(req) {
-  const u = session_(req.token, 'admin'), idUjian = str_(req.idUjian), nomor = str_(req.nomor); examGuard_(u, idUjian);
-  const soal = soalList_(idUjian), skor = req.skor && typeof req.skor === 'object' ? req.skor : {};
-  return withLock_(function () {
-    const sh = ansSheet_(), a = findAns_(sh, idUjian, nomor);
-    if (!a) throw new Error('Jawaban peserta tidak ditemukan.');
-    const es = parseJson_(a.vals[J.ESSAY], {});
-    Object.keys(skor).forEach(function (qid) {
-      const q = soal.find(function (x) { return x.id === qid; });
-      if (!q || q.jenis !== 'ESSAY') throw new Error('Soal essay tidak ditemukan.');
-      if (skor[qid] === '' || skor[qid] === null) { delete es[qid]; return; }
-      const n = Number(skor[qid]);
-      if (isNaN(n) || n < 0 || n > q.bobot) throw new Error('Skor essay harus antara 0 dan ' + q.bobot + '.');
-      es[qid] = Math.round(n * 100) / 100;
-    });
-    sh.getRange(a.row, J.ESSAY + 1).setValue(JSON.stringify(es));
-    const h = hitung_(soal, parseJson_(a.vals[J.JAWAB], {}), es);
-    return { ok: true, ringkas: { auto: h.auto, essay: h.essay, total: h.total, maks: h.maks, nilai: h.nilai, belum: h.belum } };
   });
 }
