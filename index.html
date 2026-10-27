@@ -22,8 +22,6 @@
   } } };
 </script>
 <script src="https://cdn.jsdelivr.net/npm/lucide@0.469.0/dist/umd/lucide.min.js"></script>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
-<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
 <style>
   :root { color-scheme: dark; }
   html, body { height: 100%; }
@@ -100,30 +98,6 @@
 
   @supports (height: 100dvh) { #exam { bottom: auto; height: 100dvh; } }
   .no-sel { -webkit-user-select: none; user-select: none; }
-
-  /* soal internal: teks rumus, gambar, pilihan jawaban, navigasi soal */
-  .rich { overflow-wrap: anywhere; line-height: 1.75; }
-  .rich .katex { font-size: 1.08em; }
-  .rich .katex-display { margin: .6em 0; overflow-x: auto; overflow-y: hidden; }
-  .qimg { max-width: 100%; max-height: 360px; border-radius: 10px; background: #fff; margin-top: .6rem; display: block; }
-  .qimg:not([src]) { min-height: 90px; min-width: 140px; background: rgba(148,163,184,.18); animation: pulse 1.4s ease-in-out infinite; }
-  @keyframes pulse { 50% { opacity: .5; } }
-  #exam textarea, #exam input, #modal-root textarea, #modal-root input { -webkit-user-select: text; user-select: text; }
-  .opt { display: flex; gap: .75rem; align-items: flex-start; width: 100%; text-align: left; padding: .85rem 1rem; border-radius: 14px; border: 1px solid rgba(148,163,184,.22); background: rgba(15,23,42,.7); transition: border-color .15s, background .15s; cursor: pointer; }
-  .opt:hover { border-color: rgba(129,140,248,.7); }
-  .opt-on { border-color: #6366F1; background: rgba(79,70,229,.2); }
-  .opt-key { border-color: #10B981; background: rgba(16,185,129,.14); }
-  .opt-keyline { border-color: #10B981; border-style: dashed; }
-  .opt-bad { border-color: #EF4444; background: rgba(239,68,68,.12); }
-  .opt-mark { flex: none; width: 2rem; height: 2rem; display: flex; align-items: center; justify-content: center; font-weight: 800; border: 1px solid rgba(148,163,184,.4); border-radius: 999px; }
-  .opt-sq .opt-mark { border-radius: 8px; }
-  .opt-on .opt-mark { background: #4F46E5; border-color: #4F46E5; color: #fff; }
-  .opt-key .opt-mark { background: #10B981; border-color: #10B981; color: #04241a; }
-  .nv { height: 2.5rem; border-radius: 10px; border: 1px solid rgba(148,163,184,.25); background: rgba(15,23,42,.8); font-weight: 700; }
-  .nv-done { background: #4F46E5; border-color: #4F46E5; color: #fff; }
-  .nv-ragu { background: #F59E0B; border-color: #F59E0B; color: #1c1300; }
-  .nv-cur { outline: 2px solid #fff; outline-offset: 2px; }
-  @media (max-width: 1023px) { #qnav.mobile-open { display: flex !important; position: absolute; inset: 0; z-index: 30; width: 100% !important; background: #0B1020; } }
   @media print { body { display: none !important; } }
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
   :focus-visible { outline: 2px solid #818CF8; outline-offset: 2px; }
@@ -143,7 +117,7 @@
  *  Isi API_URL dengan URL Web App Google Apps Script (.../exec).
  *  Jika dikosongkan, aplikasi berjalan dalam MODE DEMO (data lokal di browser).
  * ====================================================================== */
-const API_URL = 'https://script.google.com/macros/s/AKfycbxEn2e_VOz_4X_h-3U-7IK6AReJnWOwbCi4AYPsS8ROo-kNPLfeTnKl0XVAbccOVnMYRA/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbyB9ORRHRmRihpn3DGmIFZIoePeGUgzzBGYlXJj3IQtPE8JyV7EHmI20XeCemZeQL4GHQ/exec';
 const HEARTBEAT_MS = 20000;      // sinkron status ujian siswa ke server
 const MONITOR_MS = 8000;         // refresh tabel monitoring admin
 const DASH_REFRESH_MS = 20000;   // refresh daftar ujian di dashboard siswa
@@ -198,88 +172,6 @@ function enterFs() {                     // aman dipanggil di browser apa pun; s
 function exitFs() {
   const f = document.exitFullscreen || document.webkitExitFullscreen;
   if (f && fsEl()) { try { Promise.resolve(f.call(document)).catch(() => { }); } catch { } }
-}
-
-/* ---------------------------- teks kaya: rumus matematika, tebal, garis bawah ---------------------------- */
-/* $...$ = rumus sebaris, $$...$$ = rumus satu baris penuh, **tebal**, __garis bawah__. Semua teks di-escape lebih dulu. */
-function mathSpan(latex, display, raw) {
-  if (window.katex) {
-    try { return window.katex.renderToString(latex, { throwOnError: false, displayMode: display, trust: false, strict: 'ignore' }); } catch (e) { /* jatuh ke teks biasa */ }
-  }
-  return `<code class="font-mono text-indigo-200">${esc(raw)}</code>`;   // KaTeX belum termuat: tampilkan rumus apa adanya
-}
-function richHtml(src) {
-  src = String(src == null ? '' : src);
-  const plain = t => esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/__(.+?)__/g, '<u>$1</u>').replace(/\n/g, '<br>');
-  const re = /\$\$([\s\S]+?)\$\$|\$([^$\n]+?)\$/g, out = []; let i = 0, m;
-  while ((m = re.exec(src))) {
-    if (m.index > i) out.push(plain(src.slice(i, m.index)));
-    out.push(mathSpan(m[1] !== undefined ? m[1] : m[2], m[1] !== undefined, m[0]));
-    i = m.index + m[0].length;
-  }
-  if (i < src.length) out.push(plain(src.slice(i)));
-  return out.join('');
-}
-
-/* ---------------------------- gambar soal (disimpan di server, diambil lewat sesi login) ---------------------------- */
-const IMG = {};                                           // id -> data URL
-const imgHtml = (id, cls) => id ? `<img data-img="${esc(id)}" class="qimg ${cls || ''}" alt="Gambar soal" ${IMG[id] ? `src="${IMG[id]}"` : ''}>` : '';
-function fillImgs(root) { (root || document).querySelectorAll('img[data-img]').forEach(im => { if (!im.getAttribute('src') && IMG[im.dataset.img]) im.src = IMG[im.dataset.img]; }); }
-async function loadImages(ids, idUjian, root) {
-  const need = [...new Set((ids || []).filter(Boolean))].filter(id => !IMG[id]);
-  for (let i = 0; i < need.length; i += 6) {
-    try { const r = await api('getImages', { token: S.token, idUjian, ids: need.slice(i, i + 6) }); Object.assign(IMG, r.images); } catch (e) { /* dicoba lagi saat soal dibuka */ }
-    fillImgs(root);
-  }
-  fillImgs(root);
-}
-const imageIdsOf = soal => { const m = {}; (soal || []).forEach(q => { if (q.gambar) m[q.gambar] = 1; (q.opsi || []).forEach(o => { if (o.g) m[o.g] = 1; }); }); return Object.keys(m); };
-
-async function loadBitmap(file) {
-  if (window.createImageBitmap) { try { return await createImageBitmap(file); } catch (e) { /* coba cara lain */ } }
-  return new Promise((ok, no) => { const u = URL.createObjectURL(file), im = new Image(); im.onload = () => { URL.revokeObjectURL(u); ok(im); }; im.onerror = () => no(new Error('Gambar tidak bisa dibaca.')); im.src = u; });
-}
-async function compressImage(file) {                      // kecilkan agar cepat dimuat siswa dan muat di sel Google Sheets
-  const bmp = await loadBitmap(file), w0 = bmp.width, h0 = bmp.height;
-  let scale = Math.min(1, 1100 / Math.max(w0, h0)), q = 0.85, data = '';
-  for (let k = 0; k < 7; k++) {
-    const cv = document.createElement('canvas'); cv.width = Math.max(1, Math.round(w0 * scale)); cv.height = Math.max(1, Math.round(h0 * scale));
-    const cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, cv.width, cv.height); cx.drawImage(bmp, 0, 0, cv.width, cv.height);
-    data = cv.toDataURL('image/jpeg', q);
-    if (data.length < 300000) break;
-    q = Math.max(0.5, q - 0.1); scale *= 0.85;
-  }
-  if (data.length >= 420000) throw new Error('Gambar terlalu besar. Perkecil gambarnya lalu coba lagi.');
-  return data;
-}
-async function uploadImage(file) {
-  if (!/^image\//.test(file.type)) throw new Error('File harus berupa gambar (JPG, PNG, atau WebP).');
-  const du = await compressImage(file);
-  const r = await api('adminUploadImage', { token: S.token, mime: 'image/jpeg', data: du.split(',')[1] });
-  IMG[r.id] = du; return r.id;
-}
-
-/* ---------------------------- palet simbol & fungsi matematika untuk guru ---------------------------- */
-/* Format item: [tampilan, LaTeX]. Tanda ‸ = posisi kursor setelah disisipkan (atau pembungkus teks yang diblok). */
-const PALETTE = [
-  ['Dasar', [['±', '\\pm'], ['×', '\\times'], ['÷', '\\div'], ['·', '\\cdot'], ['≠', '\\neq'], ['≤', '\\leq'], ['≥', '\\geq'], ['≈', '\\approx'], ['∞', '\\infty'], ['π', '\\pi'], ['°', '^{\\circ}'], ['%', '\\%']]],
-  ['Struktur', [['a/b', '\\frac{‸}{}'], ['√', '\\sqrt{‸}'], ['ⁿ√', '\\sqrt[n]{‸}'], ['x²', '^{2}'], ['xⁿ', '^{‸}'], ['xₙ', '_{‸}'], ['( )', '\\left(‸\\right)'], ['| |', '\\left|‸\\right|'], ['log', '\\log_{‸}'], ['sin', '\\sin '], ['cos', '\\cos '], ['tan', '\\tan ']]],
-  ['Kalkulus', [['∫', '\\int_{‸}^{}'], ['Σ', '\\sum_{i=1}^{n}‸'], ['lim', '\\lim_{x \\to ‸}'], ['d/dx', '\\frac{d}{dx}‸'], ['∂', '\\partial '], ['Δ', '\\Delta '], ['→', '\\to ']]],
-  ['Yunani', [['α', '\\alpha '], ['β', '\\beta '], ['γ', '\\gamma '], ['δ', '\\delta '], ['ε', '\\varepsilon '], ['θ', '\\theta '], ['λ', '\\lambda '], ['μ', '\\mu '], ['ρ', '\\rho '], ['σ', '\\sigma '], ['φ', '\\phi '], ['ω', '\\omega '], ['Δ', '\\Delta '], ['Σ', '\\Sigma '], ['Ω', '\\Omega ']]],
-  ['Himpunan', [['∈', '\\in '], ['∉', '\\notin '], ['∪', '\\cup '], ['∩', '\\cap '], ['⊂', '\\subset '], ['⊆', '\\subseteq '], ['∅', '\\emptyset '], ['ℝ', '\\mathbb{R}'], ['ℕ', '\\mathbb{N}'], ['ℤ', '\\mathbb{Z}'], ['⇒', '\\Rightarrow '], ['⇔', '\\Leftrightarrow '], ['∴', '\\therefore '], ['∀', '\\forall '], ['∃', '\\exists ']]],
-  ['Geometri', [['∠', '\\angle '], ['⊥', '\\perp '], ['∥', '\\parallel '], ['△', '\\triangle '], ['≅', '\\cong '], ['∼', '\\sim '], ['vektor', '\\vec{‸}'], ['garis', '\\overline{‸}'], ['busur', '\\widehat{‸}']]],
-  ['Matriks', [['2×2', '\\begin{pmatrix} ‸ &  \\\\  &  \\end{pmatrix}'], ['sistem', '\\begin{cases} ‸ \\\\  \\end{cases}'], ['det', '\\begin{vmatrix} ‸ &  \\\\  &  \\end{vmatrix}']]],
-  ['Kimia/Fisika', [['H₂O', '\\mathrm{H_2O}'], ['CO₂', '\\mathrm{CO_2}'], ['→', '\\rightarrow '], ['⇌', '\\rightleftharpoons '], ['ΔH', '\\Delta H'], ['m/s²', '\\mathrm{m/s^2}'], ['µ', '\\mu ']]]
-];
-function insertSnippet(el, t, math) {
-  const s = el.selectionStart, e = el.selectionEnd, v = el.value, sel = v.slice(s, e);
-  const inside = ((v.slice(0, s).replace(/\\\$/g, '').match(/\$/g) || []).length % 2) === 1;     // kursor sedang di dalam $...$
-  let ins = math && !inside ? '$' + t + '$' : t;
-  if (sel && ins.indexOf('‸') >= 0) ins = ins.replace('‸', sel);                                // bungkus teks yang diblok
-  const caret = ins.indexOf('‸'); ins = ins.replace('‸', '');
-  el.value = v.slice(0, s) + ins + v.slice(e);
-  const pos = s + (caret >= 0 ? caret : ins.length);
-  el.focus(); el.setSelectionRange(pos, pos); el.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
 /* ---------------------------- sesi ---------------------------- */
@@ -600,16 +492,8 @@ function logLocal(type) { try { const k = logKey(), a = JSON.parse(localStorage.
 function runExam(r, fsOk) {
   const u = S.user;
   X = { id: r.exam.id, nama: r.exam.nama, sekolah: r.exam.sekolah, batas: r.batas, vio: r.violations, endAt: Date.now() + r.remainingSec * 1000,
-        link: r.link || '', locked: false, finished: false, active: false, inflight: 0, loads: 0, lockedAt: 0, devOpen: false,
-        mode: r.mode === 'internal' ? 'internal' : 'form', soal: r.soal || [], ans: r.jawaban || {}, ragu: new Set(r.ragu || []), cur: 0,
-        dirty: false, ver: 0, saving: false, saveMsg: '', opsiUjian: r.opsiUjian || {} };
+        link: r.link || '', locked: false, finished: false, active: false, inflight: 0, loads: 0, lockedAt: 0, devOpen: false };
   clearTimers();
-  const mainHtml = r.mode === 'internal'
-    ? `<main class="relative flex-1 min-h-0 bg-slate-950 overflow-hidden"><div id="qapp" class="absolute inset-0"></div><div id="wm" class="absolute inset-0 pointer-events-none z-10"></div></main>`
-    : `<main class="relative flex-1 min-h-0 bg-white">
-      <iframe id="frame" title="Soal ujian" class="absolute inset-0 w-full h-full border-0 bg-white" sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer"></iframe>
-      <div id="wm" class="absolute inset-0 pointer-events-none z-10"></div>
-    </main>`;
   view(`<div id="exam" class="fixed inset-0 flex flex-col bg-ink no-sel">
     <header class="relative z-20 bg-slate-900/95 border-b border-slate-700/60 px-3 sm:px-5 py-2.5 flex items-center gap-3 flex-wrap">
       <div class="min-w-0 flex-1 basis-60">
@@ -622,7 +506,10 @@ function runExam(r, fsOk) {
     </header>
     <div id="fsbar" class="hidden z-20 bg-amber-500/15 border-b border-amber-500/40 text-amber-200 text-sm px-4 py-2 items-center gap-3 flex-wrap">
       ${icon('maximize', 'w-4 h-4')}<span class="flex-1" id="fs-text">Layar penuh tidak aktif.</span><button id="btn-fs" class="btn btn-sm btn-ghost">Masuk layar penuh</button></div>
-    ${mainHtml}
+    <main class="relative flex-1 min-h-0 bg-white">
+      <iframe id="frame" title="Soal ujian" class="absolute inset-0 w-full h-full border-0 bg-white" sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer"></iframe>
+      <div id="wm" class="absolute inset-0 pointer-events-none z-10"></div>
+    </main>
     <div id="overlay-root"></div></div>`);
   const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='340' height='200'><text x='20' y='110' transform='rotate(-20 170 100)' fill='rgba(79,70,229,.17)' font-size='15' font-family='sans-serif'>${esc(u.nama)} - ${esc(u.nomor)}</text></svg>`;
   $('#wm').style.backgroundImage = `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
@@ -631,18 +518,15 @@ function runExam(r, fsOk) {
     toast(fsSupported() ? 'Browser menolak layar penuh. Coba ketuk tombol sekali lagi, atau buka lewat Chrome/Safari (bukan dari dalam aplikasi lain).' : 'Browser ini tidak mendukung layar penuh.', 'warn', 7000);
   };
   $('#btn-finish').onclick = confirmFinish;
-  const fr = $('#frame'); if (fr) fr.addEventListener('load', () => { X && X.loads++; if (X && X.loads >= 2 && !X.locked && !X.finished) toast('Jika jawaban sudah terkirim, tekan "Selesai ujian".', 'info', 8000); });
+  $('#frame').addEventListener('load', () => { X && X.loads++; if (X && X.loads >= 2 && !X.locked && !X.finished) toast('Jika jawaban sudah terkirim, tekan "Selesai ujian".', 'info', 8000); });
   updBadge();
   if (r.status === 'Sedang Mengerjakan' && !fsSupported() && !isStandalone()) toast('Browser ini tidak mendukung layar penuh. Pelanggaran layar penuh tidak dihitung, tetapi berpindah aplikasi atau tab tetap dihitung. Di iPhone, buka lewat "Tambahkan ke Layar Utama" untuk tampilan penuh.', 'info', 12000);
-  if (r.status === 'Sedang Mengerjakan') { if (r.mode === 'internal') { buildQApp(); startSaver(); } else setFrame(); startGuard(); timers.tick = setInterval(tick, 1000); timers.hb = setInterval(heartbeat, HEARTBEAT_MS); tick(); }
+  if (r.status === 'Sedang Mengerjakan') { setFrame(); startGuard(); timers.tick = setInterval(tick, 1000); timers.hb = setInterval(heartbeat, HEARTBEAT_MS); tick(); }
   else if (r.status === 'Terkunci') { X.locked = true; showEnd('locked'); }
   else { X.finished = true; showEnd(/Waktu/.test(r.status) ? 'timeup' : 'done'); }
 }
 
-function setFrame() {
-  if (X && X.mode === 'internal') { const q = $('#qapp'); if (q) q.style.visibility = 'visible'; return; }
-  const f = $('#frame'); if (f) { X.loads = 0; f.style.visibility = 'visible'; f.src = X.link; }
-}
+function setFrame() { const f = $('#frame'); if (f) { X.loads = 0; f.style.visibility = 'visible'; f.src = X.link; } }
 function updBadge() {
   const b = $('#vbadge'); if (!b || !X) return;
   const ratio = X.vio / X.batas;
@@ -659,159 +543,8 @@ function tick() {
   if (left <= 0 && !X.locked) timeUp();
 }
 async function timeUp() {
-  if (X.finished) return; X.finished = true; stopGuard(); clearTimers('sv');
-  const res = await sendFinal('timeout'), internal = X.mode === 'internal';
-  killFrame(); leaveFullscreen();
-  if (!res && internal) X.finalSent = false;
-  showEnd('timeup');
-  if (!res && internal) retryFinal('timeout');
-}
-
-/* ---- soal di aplikasi (mode internal): tampilan, jawaban, simpan otomatis ---- */
-function isAnswered(q) {
-  const a = X.ans[q.id];
-  if (a === undefined || a === null) return false;
-  if (q.jenis === 'ESSAY') return String(a).trim() !== '';
-  if (q.jenis === 'PGK') return Array.isArray(a) && a.length > 0;
-  if (q.jenis === 'BS') return Object.keys(a).length > 0;
-  return String(a) !== '';
-}
-function buildQApp() {
-  const root = $('#qapp'); if (!root) return;
-  root.innerHTML = `<div class="h-full flex flex-col">
-    <div class="flex-1 min-h-0 flex relative">
-      <div id="qmain" class="flex-1 min-w-0 overflow-y-auto p-4 sm:p-6"><div id="qcard" class="max-w-3xl mx-auto"></div></div>
-      <aside id="qnav" class="hidden lg:flex lg:w-72 flex-col border-l border-slate-700/60 bg-slate-900/80 p-4 overflow-y-auto"></aside>
-    </div>
-    <div class="border-t border-slate-700/60 bg-slate-900/95 px-3 py-2 flex items-center gap-2">
-      <button id="qprev" class="btn btn-ghost btn-sm">${icon('chevron-left', 'w-4 h-4')} Sebelumnya</button>
-      <button id="qlist" class="lg:hidden btn btn-ghost btn-sm">${icon('layout-grid', 'w-4 h-4')} Daftar soal</button>
-      <div id="qsave" class="flex-1 text-center text-xs text-slate-400 truncate"></div>
-      <button id="qnext" class="btn btn-primary btn-sm">Berikutnya ${icon('chevron-right', 'w-4 h-4')}</button>
-    </div></div>`;
-  $('#qprev').onclick = () => goQ(X.cur - 1);
-  $('#qnext').onclick = () => { if (X.cur >= X.soal.length - 1) confirmFinish(); else goQ(X.cur + 1); };
-  $('#qlist').onclick = () => $('#qnav').classList.add('mobile-open');
-  renderQ(); updSave();
-  const first = X.soal[0] ? [X.soal[0]] : [];
-  loadImages(imageIdsOf(first), X.id, root).then(() => loadImages(imageIdsOf(X.soal), X.id, root));   // soal pertama dulu, sisanya di latar
-}
-function goQ(i) {
-  if (i < 0 || i >= X.soal.length) return;
-  X.cur = i; renderQ(); flushSave();
-  const m = $('#qmain'); if (m) m.scrollTop = 0;
-  const nx = X.soal[i + 1]; if (nx) loadImages(imageIdsOf([nx]), X.id, $('#qapp'));
-}
-function optsHtml(q) {
-  const a = X.ans[q.id], L = i => String.fromCharCode(65 + i);
-  if (q.jenis === 'PG' || q.jenis === 'PGK') {
-    return q.opsi.map((o, i) => {
-      const on = q.jenis === 'PG' ? a === o.id : Array.isArray(a) && a.includes(o.id);
-      return `<button type="button" data-o="${esc(o.id)}" class="opt ${q.jenis === 'PGK' ? 'opt-sq' : ''} ${on ? 'opt-on' : ''}" role="${q.jenis === 'PG' ? 'radio' : 'checkbox'}" aria-checked="${on}">
-        <span class="opt-mark">${on && q.jenis === 'PGK' ? '✓' : L(i)}</span><span class="flex-1 rich">${richHtml(o.t)}${imgHtml(o.g)}</span></button>`;
-    }).join('');
-  }
-  if (q.jenis === 'BS') {
-    return q.opsi.map((o, i) => {
-      const v = a && a[o.id];
-      return `<div class="panel p-4"><div class="flex gap-3"><span class="text-slate-400 font-bold">${i + 1}.</span><div class="flex-1 rich">${richHtml(o.t)}${imgHtml(o.g)}</div></div>
-        <div class="mt-3 flex gap-2 pl-7"><button type="button" data-s="${esc(o.id)}" data-v="B" class="btn btn-sm ${v === 'B' ? 'btn-ok' : 'btn-ghost'}" aria-pressed="${v === 'B'}">Benar</button>
-        <button type="button" data-s="${esc(o.id)}" data-v="S" class="btn btn-sm ${v === 'S' ? 'btn-danger' : 'btn-ghost'}" aria-pressed="${v === 'S'}">Salah</button></div></div>`;
-    }).join('');
-  }
-  const t = a || '';
-  return `<textarea id="qess" rows="10" maxlength="1500" class="input" placeholder="Ketik jawaban Anda di sini..." aria-label="Jawaban essay">${esc(t)}</textarea>
-    <div class="text-xs text-slate-400 text-right mt-1"><span id="qcnt">${t.length}</span>/1500 karakter</div>`;
-}
-function renderQ() {
-  const q = X.soal[X.cur], n = X.soal.length, card = $('#qcard'); if (!card || !q) return;
-  const hint = { PG: 'Pilih satu jawaban.', PGK: 'Pilih semua jawaban yang benar.', BS: 'Tentukan Benar atau Salah untuk setiap pernyataan.', ESSAY: 'Tulis jawaban Anda pada kolom di bawah.' }[q.jenis];
-  card.innerHTML = `<div class="flex items-center gap-3 flex-wrap mb-4">
-      <span class="badge b-run">Soal ${X.cur + 1} dari ${n}</span><span class="text-xs text-slate-400">${hint}</span>
-      <button id="qragu" type="button" class="ml-auto btn btn-sm ${X.ragu.has(q.id) ? 'btn-primary' : 'btn-ghost'}" aria-pressed="${X.ragu.has(q.id)}">${icon('flag', 'w-4 h-4')} Ragu-ragu</button></div>
-    <div class="panel p-5"><div class="rich text-lg">${richHtml(q.teks)}</div>${imgHtml(q.gambar)}</div>
-    <div id="qopts" class="mt-4 space-y-2">${optsHtml(q)}</div>`;
-  paint(); fillImgs(card); bindQ(q); renderNav();
-  const last = X.cur >= n - 1, nx = $('#qnext'); if (nx) nx.innerHTML = last ? `${icon('flag', 'w-4 h-4')} Tinjau dan selesai` : `Berikutnya ${icon('chevron-right', 'w-4 h-4')}`;
-  const pv = $('#qprev'); if (pv) pv.disabled = X.cur === 0;
-  paint();
-}
-function setAns(q, v) {
-  const empty = v === undefined || v === null || v === '' || (Array.isArray(v) && !v.length) || (typeof v === 'object' && !Array.isArray(v) && !Object.keys(v).length);
-  if (empty) delete X.ans[q.id]; else X.ans[q.id] = v;
-  markDirty(); renderNav();
-}
-function bindQ(q) {
-  $('#qragu').onclick = () => { X.ragu.has(q.id) ? X.ragu.delete(q.id) : X.ragu.add(q.id); markDirty(); renderQ(); };
-  const redo = () => { $('#qopts').innerHTML = optsHtml(q); fillImgs($('#qopts')); bindOpts(q, redo); };
-  bindOpts(q, redo);
-}
-function bindOpts(q, redo) {
-  const box = $('#qopts');
-  if (q.jenis === 'PG') box.querySelectorAll('[data-o]').forEach(b => b.onclick = () => { setAns(q, X.ans[q.id] === b.dataset.o ? '' : b.dataset.o); redo(); });
-  else if (q.jenis === 'PGK') box.querySelectorAll('[data-o]').forEach(b => b.onclick = () => {
-    const cur = Array.isArray(X.ans[q.id]) ? X.ans[q.id].slice() : [], i = cur.indexOf(b.dataset.o);
-    if (i >= 0) cur.splice(i, 1); else cur.push(b.dataset.o);
-    setAns(q, cur); redo();
-  });
-  else if (q.jenis === 'BS') box.querySelectorAll('[data-s]').forEach(b => b.onclick = () => {
-    const cur = Object.assign({}, X.ans[q.id] || {}); if (cur[b.dataset.s] === b.dataset.v) delete cur[b.dataset.s]; else cur[b.dataset.s] = b.dataset.v;
-    setAns(q, cur); redo();
-  });
-  else {
-    const ta = $('#qess');
-    ta.oninput = () => { setAns(q, ta.value); $('#qcnt').textContent = ta.value.length; };
-    ta.onblur = () => flushSave();
-  }
-}
-function renderNav() {
-  const nav = $('#qnav'); if (!nav) return;
-  const done = X.soal.filter(isAnswered).length;
-  nav.innerHTML = `<div class="flex items-center justify-between mb-3"><div class="font-bold">Daftar soal</div><button id="qnav-close" type="button" class="lg:hidden btn btn-ghost btn-sm">Tutup</button></div>
-    <div class="text-xs text-slate-400 mb-3">${done} dari ${X.soal.length} dijawab${X.ragu.size ? ', ' + X.ragu.size + ' ragu-ragu' : ''}</div>
-    <div class="grid grid-cols-5 gap-2">${X.soal.map((q, i) => `<button type="button" data-go="${i}" class="nv ${i === X.cur ? 'nv-cur' : ''} ${X.ragu.has(q.id) ? 'nv-ragu' : isAnswered(q) ? 'nv-done' : ''}" aria-label="Soal ${i + 1}">${i + 1}</button>`).join('')}</div>
-    <div class="mt-5 text-xs text-slate-400 space-y-1.5"><div><span class="inline-block w-3 h-3 rounded bg-indigo-600 mr-2 align-middle"></span>Sudah dijawab</div>
-      <div><span class="inline-block w-3 h-3 rounded bg-amber-500 mr-2 align-middle"></span>Ragu-ragu</div>
-      <div><span class="inline-block w-3 h-3 rounded border border-slate-500 mr-2 align-middle"></span>Belum dijawab</div></div>`;
-  nav.querySelectorAll('[data-go]').forEach(b => b.onclick = () => { nav.classList.remove('mobile-open'); goQ(+b.dataset.go); });
-  const c = $('#qnav-close'); if (c) c.onclick = () => nav.classList.remove('mobile-open');
-}
-/* simpan otomatis: tiap perubahan (jeda 2,5 detik), tiap pindah soal, dan tiap 10 detik */
-function updSave() { const el = $('#qsave'); if (el && X) el.textContent = X.saveMsg || ''; }
-function markDirty() { X.dirty = true; X.ver++; X.saveMsg = 'Belum tersimpan'; updSave(); clearTimeout(X.svT); X.svT = setTimeout(() => flushSave(), 2500); }
-async function flushSave(force) {
-  const x = X;
-  if (!x || x.mode !== 'internal' || x.finished || x.locked || x.saving || (!x.dirty && !force)) return;
-  const v = x.ver; x.saving = true; x.saveMsg = 'Menyimpan...'; updSave();
-  try {
-    const r = await api('saveAnswers', { token: S.token, idUjian: x.id, jawaban: x.ans, ragu: [...x.ragu] });
-    if (x === X) {
-      if (r.disimpan) { if (x.ver === v) x.dirty = false; x.saveMsg = x.dirty ? 'Belum tersimpan' : 'Tersimpan ' + new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).replace(/\./g, ':'); }
-      else x.saveMsg = '';
-    }
-  } catch (e) { if (x === X) x.saveMsg = 'Gagal menyimpan, mencoba lagi...'; }
-  x.saving = false; if (x === X) updSave();
-}
-function startSaver() { clearTimers('sv'); timers.sv = setInterval(() => flushSave(), 10000); }
-function resultHtml(h) {
-  const body = h.maks > 0
-    ? `<div class="text-sm text-slate-400">Skor soal pilihan (dinilai otomatis)</div><div class="text-3xl font-extrabold text-emerald-300 mt-1">${h.poin} <span class="text-lg text-slate-400">dari ${h.maks}</span></div>
-       <div class="text-sm text-slate-400 mt-1">Nilai ${h.nilai}${h.adaEssay ? '. Soal essay (bobot ' + h.maksEssay + ') dinilai oleh guru.' : ''}</div>`
-    : `<div class="text-sm text-slate-300">Seluruh soal berupa essay dan akan dinilai oleh guru.</div>`;
-  return `<div class="mt-5 p-4 rounded-xl bg-slate-800/70 border border-slate-700 text-left">${body}</div>`;
-}
-async function sendFinal(reason) {              // kirim jawaban terakhir + tandai selesai
-  const x = X;
-  const body = { token: S.token, idUjian: x.id, ...(reason ? { reason } : {}), ...(x.mode === 'internal' ? { jawaban: x.ans, ragu: [...x.ragu] } : {}) };
-  try { const res = await api('finish', body); if (res.hasil) x.hasil = res.hasil; x.finalSent = true; return res; } catch (e) { return null; }
-}
-function retryFinal(reason) {                   // koneksi putus saat waktu habis: jawaban dikirim ulang otomatis
-  clearTimers('fin');
-  timers.fin = setInterval(async () => {
-    if (!X) return clearTimers('fin');
-    const res = await sendFinal(reason);
-    if (res) { clearTimers('fin'); const n = $('#final-note'); if (n) n.remove(); const hb = $('#final-box'); if (hb && X.hasil) hb.innerHTML = resultHtml(X.hasil); }
-  }, 5000);
+  if (X.finished) return; X.finished = true; stopGuard(); try { await api('finish', { token: S.token, idUjian: X.id, reason: 'timeout' }); } catch { }
+  killFrame(); showEnd('timeup');
 }
 
 /* ---- guard ---- */
@@ -832,13 +565,13 @@ function startGuard() {
     else if (e.altKey && k === 'tab') e.preventDefault();
   };
   G.keyup = e => { if (e.key === 'PrintScreen') { try { navigator.clipboard.writeText(''); } catch { } violate('Mengambil tangkapan layar'); } };
-  G.stop = e => { const t = e.target && (e.target.nodeType === 1 ? e.target : e.target.parentElement); if (e.type === 'selectstart' && t && t.closest && t.closest('textarea,input')) return; e.preventDefault(); };
+  G.stop = e => { e.preventDefault(); };
   G.print = () => violate('Mencoba mencetak halaman');
   G.unload = e => { e.preventDefault(); e.returnValue = ''; };
   document.addEventListener('visibilitychange', G.vis); window.addEventListener('blur', G.blur);
   document.addEventListener('fullscreenchange', G.fs); document.addEventListener('webkitfullscreenchange', G.fs);
   window.addEventListener('keydown', G.key, true); window.addEventListener('keyup', G.keyup, true);
-  ['contextmenu', 'copy', 'cut', 'paste', 'dragstart', 'selectstart', 'drop'].forEach(ev => document.addEventListener(ev, G.stop, true));
+  ['contextmenu', 'copy', 'cut', 'paste', 'dragstart', 'selectstart'].forEach(ev => document.addEventListener(ev, G.stop, true));
   window.addEventListener('beforeprint', G.print); window.addEventListener('beforeunload', G.unload);
   timers.dev = setInterval(() => {                            // deteksi DevTools yang menempel (saat layar penuh)
     if (!X || X.locked) return;
@@ -850,23 +583,22 @@ function stopGuard() {
   if (X) X.active = false;
   document.removeEventListener('visibilitychange', G.vis); window.removeEventListener('blur', G.blur); document.removeEventListener('fullscreenchange', G.fs); document.removeEventListener('webkitfullscreenchange', G.fs);
   window.removeEventListener('keydown', G.key, true); window.removeEventListener('keyup', G.keyup, true);
-  ['contextmenu', 'copy', 'cut', 'paste', 'dragstart', 'selectstart', 'drop'].forEach(ev => document.removeEventListener(ev, G.stop, true));
+  ['contextmenu', 'copy', 'cut', 'paste', 'dragstart', 'selectstart'].forEach(ev => document.removeEventListener(ev, G.stop, true));
   window.removeEventListener('beforeprint', G.print); window.removeEventListener('beforeunload', G.unload);
   clearTimers('dev');
 }
 function leaveFullscreen() { if (fsEl()) { if (X) X.exiting = true; exitFs(); setTimeout(() => X && (X.exiting = false), 600); } }
-function killFrame() { const f = $('#frame'); if (f) { f.src = 'about:blank'; f.style.visibility = 'hidden'; } const q = $('#qapp'); if (q) q.style.visibility = 'hidden'; }
-function stopExamHard() { if (!X) return; stopGuard(); clearTimers('tick', 'hb', 'dev', 'ext', 'sv', 'fin'); leaveFullscreen(); X = null; }
+function killFrame() { const f = $('#frame'); if (f) { f.src = 'about:blank'; f.style.visibility = 'hidden'; } }
+function stopExamHard() { if (!X) return; stopGuard(); clearTimers('tick', 'hb', 'dev', 'ext'); leaveFullscreen(); X = null; }
 
 /* ---- pelanggaran ---- */
 function violate(type) {
   if (!X || !X.active || X.locked || X.finished) return;
   const now = Date.now(); if (now - lastV < 1500) return; lastV = now;       // satu aksi = satu pelanggaran
   X.vio++; updBadge(); logLocal(type);
-  const savedP = X.mode === 'internal' ? flushSave(true) : Promise.resolve();      // jawaban disimpan dulu sebelum kemungkinan terkunci
   if (X.vio >= X.batas) lockNow(); else showWarning(type);
   X.inflight++;
-  savedP.catch(() => { }).then(() => api('violation', { token: S.token, idUjian: X.id, type, clientViolations: X.vio })).then(syncState).catch(() => { /* offline: heartbeat akan menyinkronkan */ }).finally(() => X && X.inflight--);
+  api('violation', { token: S.token, idUjian: X.id, type, clientViolations: X.vio }).then(syncState).catch(() => { /* offline: heartbeat akan menyinkronkan */ }).finally(() => X && X.inflight--);
 }
 function showWarning(type) {
   const root = $('#overlay-root'); if (!root) return;
@@ -891,7 +623,7 @@ function showEnd(kind) {
   const root = $('#overlay-root'); if (!root) return;
   const c = {
     locked: ['lock', 'text-red-400', 'bg-bad/20', 'UJIAN TERKUNCI!', 'Anda telah melebihi batas kecurangan yang diizinkan. Silakan hubungi proktor/pengawas ujian.'],
-    timeup: ['alarm-clock-off', 'text-amber-300', 'bg-amber-500/20', 'WAKTU HABIS', 'Waktu ujian telah berakhir. Jawaban yang sudah tersimpan tidak hilang.'],
+    timeup: ['alarm-clock-off', 'text-amber-300', 'bg-amber-500/20', 'WAKTU HABIS', 'Waktu ujian telah berakhir. Jawaban yang sudah terkirim tersimpan di Google Form.'],
     done: ['circle-check-big', 'text-emerald-300', 'bg-ok/20', 'UJIAN SELESAI', 'Terima kasih. Anda dapat menutup halaman ini atau kembali ke dashboard.']
   }[kind];
   root.innerHTML = `<div class="fixed inset-0 z-[60] flex items-center justify-center p-6 text-center ${kind === 'locked' ? 'lock-bg' : 'bg-slate-950'}"><div class="pop max-w-lg">
@@ -899,7 +631,6 @@ function showEnd(kind) {
     <h2 class="mt-6 text-4xl font-extrabold tracking-tight ${c[1]}">${c[3]}</h2>
     <p class="mt-4 text-slate-300 text-lg">${c[4]}</p>
     ${X ? `<p class="mt-2 text-sm text-slate-500">Pelanggaran tercatat: ${X.vio} dari ${X.batas}</p>` : ''}
-    <div id="final-box">${X && X.hasil ? resultHtml(X.hasil) : ''}</div>${X && X.mode === 'internal' && X.finalSent === false ? '<p id="final-note" class="mt-3 text-sm text-amber-300">Jawaban terakhir Anda belum terkirim. Aplikasi mencoba mengirim ulang otomatis; jangan tutup halaman ini.</p>' : ''}
     ${kind === 'timeup' ? '<p class="mt-3 text-sm text-slate-400">Butuh tambahan waktu? Hubungi pengawas. Jika disetujui, tombol Lanjutkan ujian akan muncul di sini.</p><div id="ext-area"></div>' : ''}
     <button id="back" class="btn btn-ghost mt-8">${icon('house', 'w-4 h-4')} Kembali ke dashboard</button></div></div>`;
   paint();
@@ -934,19 +665,11 @@ function offerResume() {
 
 async function confirmFinish() {
   if (!X || X.finished || X.locked) return;
-  let body = '<p>Pastikan semua jawaban sudah dikirim pada Google Form. Setelah ini Anda tidak bisa masuk kembali ke ujian ini.</p>';
-  if (X.mode === 'internal') {
-    const n = X.soal.length, done = X.soal.filter(isAnswered).length, ragu = X.ragu.size;
-    body = `<p>Anda menjawab <b>${done}</b> dari <b>${n}</b> soal.${n - done ? ` <span class="text-amber-300">${n - done} soal belum dijawab.</span>` : ''}${ragu ? ` ${ragu} soal ditandai ragu-ragu.` : ''}</p><p>Setelah diselesaikan, Anda tidak bisa kembali ke ujian ini.</p>`;
-  }
-  const r = await ask({ title: 'Selesaikan ujian?', ic: 'flag', tone: 'ok', body, actions: [{ id: 'no', label: 'Lanjut mengerjakan' }, { id: 'yes', label: 'Ya, selesaikan', kind: 'btn-ok' }] });
+  const r = await ask({ title: 'Selesaikan ujian?', ic: 'flag', tone: 'ok', body: '<p>Pastikan semua jawaban sudah dikirim pada Google Form. Setelah ini Anda tidak bisa masuk kembali ke ujian ini.</p>',
+    actions: [{ id: 'no', label: 'Lanjut mengerjakan' }, { id: 'yes', label: 'Ya, selesaikan', kind: 'btn-ok' }] });
   if (r !== 'yes') return;
-  X.finished = true; stopGuard(); clearTimers('sv');
-  const res = await sendFinal();
-  if (!res && X.mode === 'internal') {            // jawaban belum terkirim: jangan akhiri, biarkan peserta mencoba lagi
-    X.finished = false; startGuard(); startSaver(); toast('Jawaban belum terkirim. Periksa koneksi lalu tekan Selesai lagi.', 'err', 8000); return;
-  }
-  if (!res) toast('Status selesai belum tersimpan di server.', 'warn');
+  X.finished = true; stopGuard();
+  try { await api('finish', { token: S.token, idUjian: X.id }); } catch (e) { toast('Status selesai belum tersimpan di server: ' + e.message, 'warn'); }
   killFrame(); leaveFullscreen(); showEnd('done');
 }
 
@@ -971,7 +694,7 @@ function syncState(r) {
 /* ======================================================================
  *  DASHBOARD ADMIN
  * ====================================================================== */
-let A = { tab: 'ujian', exams: [], schools: [], logs: [], filter: '', q: '', sf: '', skew: 0, tz: '', tzLabel: 'WIB', kelas: {}, curExam: '', soal: null, hasil: null };
+let A = { tab: 'ujian', exams: [], schools: [], logs: [], filter: '', q: '', sf: '', skew: 0, tz: '', tzLabel: 'WIB', kelas: {} };
 
 async function viewAdmin() {
   const u = S.user;
@@ -992,12 +715,10 @@ async function viewAdmin() {
   setTab(A.tab);
 }
 function setTab(t) {
-  if ((t === 'soal' || t === 'hasil') && !A.curExam) t = 'ujian';
   A.tab = t; clearTimers('mon');
-  const parent = (t === 'soal' || t === 'hasil') ? 'ujian' : t;
-  $('#tab-ujian').className = 'btn btn-sm ' + (parent === 'ujian' ? 'btn-primary' : 'btn-ghost');
-  $('#tab-mon').className = 'btn btn-sm ' + (parent === 'mon' ? 'btn-primary' : 'btn-ghost');
-  if (t === 'ujian') renderExamAdmin(); else if (t === 'mon') renderMonitor(); else if (t === 'soal') renderSoalManager(); else renderHasil();
+  $('#tab-ujian').className = 'btn btn-sm ' + (t === 'ujian' ? 'btn-primary' : 'btn-ghost');
+  $('#tab-mon').className = 'btn btn-sm ' + (t === 'mon' ? 'btn-primary' : 'btn-ghost');
+  t === 'ujian' ? renderExamAdmin() : renderMonitor();
 }
 
 const newId = () => 'UJ-' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 5).toUpperCase();
@@ -1021,8 +742,8 @@ function kelasChips() {                          // pilihan cepat dari kelas yan
 const stCls = { Berlangsung: 'b-done', Aktif: 'b-done', Terjadwal: 'b-run', Selesai: 'b-off', Nonaktif: 'b-off' };
 
 function renderExamAdmin(edit) {
-  const scoped = S.user.sekolah !== '*', e = edit || { id: '', sekolah: scoped ? S.user.sekolah : '', nama: '', link: '', batas: 3, durasi: 60, status: 'Aktif', mulai: '', selesai: '', token: '', kelas: '', sumber: 'form', opsiUjian: { acakSoal: false, acakOpsi: false, tampilNilai: true } };
-  const op = e.opsiUjian || {}, hasSched = !!(e.mulai || e.selesai), tz = A.tzLabel || 'perangkat ini';
+  const scoped = S.user.sekolah !== '*', e = edit || { id: '', sekolah: scoped ? S.user.sekolah : '', nama: '', link: '', batas: 3, durasi: 60, status: 'Aktif', mulai: '', selesai: '', token: '', kelas: '' };
+  const hasSched = !!(e.mulai || e.selesai), tz = A.tzLabel || 'perangkat ini';
   $('#tab').innerHTML = `<div class="grid xl:grid-cols-5 gap-6">
     <form id="fx" class="panel p-6 xl:col-span-2 space-y-4 h-fit">
       <h2 class="text-lg font-bold">${e.id ? 'Ubah ujian' : 'Tambah ujian'}</h2>
@@ -1035,15 +756,8 @@ function renderExamAdmin(edit) {
         <input id="x-kelas" class="input" autocomplete="off" value="${esc(e.kelas || '')}" placeholder="Kosongkan = semua kelas. Contoh: 11 atau XI IPA">
         <div id="x-kelas-chips" class="flex flex-wrap gap-1.5 mt-2"></div>
         <p class="text-xs text-slate-500 mt-1">Hanya siswa kelas ini yang melihat ujian. "11" dan "XI" sama artinya (semua kelas 11); "XI IPA" untuk semua IPA kelas 11. Pisahkan beberapa kelas dengan koma.</p></div>
-      <div><span class="lbl">Sumber soal</span><div class="grid grid-cols-2 gap-2">
-        <label class="opt !p-3 items-center"><input type="radio" name="x-src" value="form" class="accent-indigo-500" ${e.sumber !== 'internal' ? 'checked' : ''}> <span>Google Form</span></label>
-        <label class="opt !p-3 items-center"><input type="radio" name="x-src" value="internal" class="accent-indigo-500" ${e.sumber === 'internal' ? 'checked' : ''}> <span>Soal di aplikasi</span></label></div></div>
-      <div id="x-link-box"><label class="lbl" for="x-ln">Link Google Form</label><textarea id="x-ln" class="input" rows="2" required placeholder="Tempel link formulir atau kode embed (iframe)">${esc(e.link)}</textarea>
+      <div><label class="lbl" for="x-ln">Link Google Form</label><textarea id="x-ln" class="input" rows="2" required placeholder="Tempel link formulir atau kode embed (iframe)">${esc(e.link)}</textarea>
         <p class="text-xs text-slate-500 mt-1">Parameter embed ditambahkan otomatis.</p></div>
-      <div id="x-int-box" class="rounded-xl border border-slate-700/60 p-4 space-y-2 hidden"><p class="text-xs text-slate-400">Soal dibuat di aplikasi ini (pilihan ganda, PG kompleks, benar/salah, essay). Setelah ujian disimpan, klik tombol <b>Soal</b> di daftar ujian untuk menambah soal.</p>
-        <label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="x-acaks" class="accent-indigo-500 w-4 h-4" ${op.acakSoal ? 'checked' : ''}><span>Acak urutan soal tiap peserta</span></label>
-        <label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="x-acako" class="accent-indigo-500 w-4 h-4" ${op.acakOpsi ? 'checked' : ''}><span>Acak urutan pilihan jawaban</span></label>
-        <label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="x-nilai" class="accent-indigo-500 w-4 h-4" ${op.tampilNilai !== false ? 'checked' : ''}><span>Tampilkan skor ke peserta setelah selesai</span></label></div>
       <div class="grid grid-cols-2 gap-3">
         <div><label class="lbl" for="x-bt">Maksimal pelanggaran</label><input id="x-bt" type="number" min="1" class="input" required value="${e.batas}"></div>
         <div><label class="lbl" for="x-dr">Waktu ujian (menit)</label><input id="x-dr" type="number" min="1" class="input" required value="${e.durasi}"></div></div>
@@ -1067,14 +781,11 @@ function renderExamAdmin(edit) {
   paint();
   $('#x-sched').onchange = ev => { $('#x-sched-box').classList.toggle('hidden', !ev.target.checked); $('#x-sched-off').classList.toggle('hidden', ev.target.checked); };
   $('#x-tok-gen').onclick = () => { $('#x-token').value = genToken(); };
-  const syncSrc = () => { const internal = document.querySelector('input[name="x-src"]:checked').value === 'internal'; $('#x-link-box').classList.toggle('hidden', internal); $('#x-int-box').classList.toggle('hidden', !internal); $('#x-ln').required = !internal; };
-  document.querySelectorAll('input[name="x-src"]').forEach(r => r.onchange = syncSrc); syncSrc();
   $('#x-sk').addEventListener('input', kelasChips); $('#x-kelas').addEventListener('input', kelasChips); kelasChips();
   $('#fx').onsubmit = async ev => {
     ev.preventDefault(); const b = $('#fx button[type=submit]'); busy(b, true, 'Menyimpan...');
     try {
-      const internal = document.querySelector('input[name="x-src"]:checked').value === 'internal';
-      if (!internal) normForm($('#x-ln').value);
+      normForm($('#x-ln').value);
       const useS = $('#x-sched').checked, mulai = useS ? $('#x-mulai').value : '', selesai = useS ? $('#x-selesai').value : '';
       if (useS && !mulai && !selesai) throw new Error('Isi jadwal dibuka dan/atau ditutup, atau matikan jadwal otomatis.');
       if (mulai && selesai && selesai <= mulai) throw new Error('Jadwal ditutup harus setelah jadwal dibuka.');
@@ -1083,9 +794,8 @@ function renderExamAdmin(edit) {
       const dur = +$('#x-dr').value;
       if (mulai && selesai && (Date.parse(selesai) - Date.parse(mulai)) / 60000 < dur) toast('Catatan: rentang jadwal lebih singkat dari durasi ujian. Peserta dihentikan saat jadwal ditutup.', 'warn', 8000);
       const id = $('#x-id').value || newId(); $('#x-id').value = id;          // ID dibuat di sini agar pengulangan tidak menggandakan ujian
-      const r = await api('adminSaveExam', { token: S.token, exam: { id, sekolah: $('#x-sk').value.trim(), nama: $('#x-nm').value.trim(), link: internal ? '' : $('#x-ln').value,
-        batas: +$('#x-bt').value, durasi: dur, status: $('#x-st').value, mulai, selesai, token, kelas: $('#x-kelas').value.trim(), sumber: internal ? 'internal' : 'form',
-        opsiUjian: internal ? { acakSoal: $('#x-acaks').checked, acakOpsi: $('#x-acako').checked, tampilNilai: $('#x-nilai').checked } : undefined } });
+      const r = await api('adminSaveExam', { token: S.token, exam: { id, sekolah: $('#x-sk').value.trim(), nama: $('#x-nm').value.trim(), link: $('#x-ln').value,
+        batas: +$('#x-bt').value, durasi: dur, status: $('#x-st').value, mulai, selesai, token, kelas: $('#x-kelas').value.trim() } });
       A.exams = r.exams; toast('Ujian tersimpan dan tersinkron ke Google Sheets', 'ok'); renderExamAdmin();
     } catch (err) { toast(err.message, 'err'); busy(b, false); }
   };
@@ -1105,18 +815,16 @@ function drawExamTable() {
     : '<span class="text-xs text-slate-500">-</span>';
   box.innerHTML = `<h2 class="text-lg font-bold px-2 pt-1 pb-3">Daftar ujian</h2>
     <table class="t"><thead><tr><th>Ujian</th><th>Jadwal</th><th>Durasi</th><th>Status</th><th>Token</th><th></th></tr></thead><tbody>
-    ${A.exams.length ? A.exams.map(x => `<tr><td><div class="font-semibold">${esc(x.nama)}</div><div class="text-xs text-slate-500">${esc(x.sekolah)} - ${esc(x.id)}</div><div class="text-xs ${x.kelas ? 'text-indigo-300' : 'text-slate-500'}">${x.kelas ? 'Kelas: ' + esc(x.kelas) : 'Semua kelas'}</div><div class="text-xs ${x.sumber === 'internal' ? 'text-emerald-300' : 'text-slate-500'}">${x.sumber === 'internal' ? 'Soal di aplikasi - ' + (x.jumlahSoal || 0) + ' soal' : 'Google Form'}</div></td><td>${sched(x)}</td>
+    ${A.exams.length ? A.exams.map(x => `<tr><td><div class="font-semibold">${esc(x.nama)}</div><div class="text-xs text-slate-500">${esc(x.sekolah)} - ${esc(x.id)}</div><div class="text-xs ${x.kelas ? 'text-indigo-300' : 'text-slate-500'}">${x.kelas ? 'Kelas: ' + esc(x.kelas) : 'Semua kelas'}</div></td><td>${sched(x)}</td>
       <td class="whitespace-nowrap">${x.durasi} mnt<div class="text-xs text-slate-500">batas ${x.batas}x</div></td>
       <td><button class="badge ${stCls[x.state] || 'b-off'}" data-tg="${esc(x.id)}" title="Klik untuk aktifkan atau nonaktifkan">${esc(x.state)}</button></td>
       <td>${tokenCell(x)}</td>
-      <td class="whitespace-nowrap text-right">${x.sumber === 'internal' ? `<button class="btn btn-primary btn-sm" data-so="${esc(x.id)}">${icon('list-checks', 'w-4 h-4')} Soal</button> <button class="btn btn-ghost btn-sm" data-hs="${esc(x.id)}">${icon('chart-column', 'w-4 h-4')} Hasil</button> ` : ''}<button class="btn btn-ghost btn-sm" data-ed="${esc(x.id)}" aria-label="Ubah">${icon('pencil', 'w-4 h-4')}</button>
+      <td class="whitespace-nowrap text-right"><button class="btn btn-ghost btn-sm" data-ed="${esc(x.id)}" aria-label="Ubah">${icon('pencil', 'w-4 h-4')}</button>
       <button class="btn btn-ghost btn-sm" data-dl="${esc(x.id)}" aria-label="Hapus">${icon('trash-2', 'w-4 h-4 text-red-400')}</button></td></tr>`).join('')
       : `<tr><td colspan="6" class="text-center text-slate-500 py-8">Belum ada ujian. Isi formulir di samping untuk menambahkan.</td></tr>`}
     </tbody></table>
     <p class="text-xs text-slate-500 px-2 pt-3">Klik badge status untuk mengaktifkan atau menonaktifkan. Pada ujian berjadwal, badge menunjukkan Terjadwal, Berlangsung, atau Selesai; Nonaktif selalu menutup ujian.</p>`;
   paint();
-  box.querySelectorAll('[data-so]').forEach(b => b.onclick = () => openSoal(b.dataset.so));
-  box.querySelectorAll('[data-hs]').forEach(b => b.onclick = () => openHasil(b.dataset.hs));
   box.querySelectorAll('[data-ed]').forEach(b => b.onclick = () => { renderExamAdmin(A.exams.find(x => x.id === b.dataset.ed)); window.scrollTo({ top: 0, behavior: 'smooth' }); });
   box.querySelectorAll('[data-tc]').forEach(b => b.onclick = () => copyText(A.exams.find(x => x.id === b.dataset.tc).token));
   box.querySelectorAll('[data-tb]').forEach(b => b.onclick = () => {
@@ -1233,433 +941,9 @@ function drawLogs() {
 const fmtAgo = s => s == null || s > 86400 * 30 ? '-' : s < 60 ? s + ' dtk lalu' : s < 3600 ? Math.floor(s / 60) + ' mnt lalu' : Math.floor(s / 3600) + ' jam lalu';
 
 /* ======================================================================
- *  GURU: KELOLA SOAL (bank soal ujian internal)
- * ====================================================================== */
-const JENIS = { PG: ['Pilihan ganda', 'b-run'], PGK: ['Pilihan ganda kompleks', 'b-lock'], BS: ['Benar / Salah', 'b-done'], ESSAY: ['Essay', 'b-off'] };
-const newQid = () => 'Q-' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 5).toUpperCase();
-const letterOf = (q, id) => { const i = (q.opsi || []).findIndex(o => o.id === id); return i < 0 ? '?' : String.fromCharCode(65 + i); };
-function keySummary(q) {
-  if (q.jenis === 'PG') return 'Kunci: ' + letterOf(q, q.kunci);
-  if (q.jenis === 'PGK') return 'Kunci: ' + (q.kunci || []).map(id => letterOf(q, id)).join(', ') + ' - ' + (q.aturan === 'sebagian' ? 'nilai sebagian' : 'harus benar semua');
-  if (q.jenis === 'BS') return 'Kunci: ' + q.opsi.map((o, i) => (i + 1) + (q.kunci[o.id] === 'B' ? ' Benar' : ' Salah')).join(', ') + ' - ' + (q.aturan === 'semua' ? 'semua harus benar' : 'nilai per pernyataan');
-  return 'Dinilai manual oleh guru';
-}
-function openSoal(id) { A.curExam = id; A.soal = null; setTab('soal'); }
-function openHasil(id) { A.curExam = id; A.hasil = null; setTab('hasil'); }
-
-async function renderSoalManager() {
-  const ex = A.exams.find(x => x.id === A.curExam); if (!ex) return setTab('ujian');
-  $('#tab').innerHTML = `<div class="space-y-4">
-    <div class="flex items-center gap-3 flex-wrap"><button id="sm-back" class="btn btn-ghost btn-sm">${icon('arrow-left', 'w-4 h-4')} Daftar ujian</button>
-      <div><div class="text-lg font-bold">${esc(ex.nama)}</div><div class="text-xs text-slate-400">${esc(ex.sekolah)}${ex.kelas ? ' - Kelas ' + esc(ex.kelas) : ''}</div></div>
-      <div class="ml-auto"><button id="sm-hasil" class="btn btn-ghost btn-sm">${icon('chart-column', 'w-4 h-4')} Hasil ujian</button></div></div>
-    <div id="sm-sum"></div>
-    <div class="panel p-4 flex flex-wrap gap-2 items-center"><span class="text-sm text-slate-400 mr-2">Tambah soal:</span>
-      ${[['PG', 'Pilihan ganda'], ['PGK', 'Pilihan ganda kompleks'], ['BS', 'Benar / Salah'], ['ESSAY', 'Essay']].map(([k, l]) => `<button class="btn btn-primary btn-sm" data-add="${k}">${icon('plus', 'w-4 h-4')} ${l}</button>`).join('')}</div>
-    <div id="sm-list" class="space-y-3"><div class="panel p-8 text-center text-slate-400">Memuat soal...</div></div></div>`;
-  paint();
-  $('#sm-back').onclick = () => setTab('ujian'); $('#sm-hasil').onclick = () => openHasil(ex.id);
-  document.querySelectorAll('[data-add]').forEach(b => b.onclick = () => editSoal(null, b.dataset.add));
-  try { const r = await api('adminGetSoal', { token: S.token, idUjian: ex.id }); A.soal = r.soal; drawSoalList(); }
-  catch (e) { toast(e.message, 'err'); $('#sm-list').innerHTML = `<div class="panel p-8 text-center text-red-300">${esc(e.message)}</div>`; }
-}
-function drawSoalList() {
-  const list = $('#sm-list'); if (!list || !A.soal) return;
-  const ex = A.exams.find(x => x.id === A.curExam); if (ex) ex.jumlahSoal = A.soal.length;
-  const tot = A.soal.reduce((s, q) => s + q.bobot, 0), cnt = k => A.soal.filter(q => q.jenis === k).length;
-  $('#sm-sum').innerHTML = `<div class="grid grid-cols-2 lg:grid-cols-5 gap-3">${[['Jumlah soal', A.soal.length], ['Total bobot', Math.round(tot * 100) / 100], ['Pilihan ganda', cnt('PG')], ['PG kompleks', cnt('PGK')], ['Benar/Salah + Essay', cnt('BS') + ' + ' + cnt('ESSAY')]]
-    .map(([l, v]) => `<div class="panel p-3"><div class="text-2xl font-extrabold">${v}</div><div class="text-xs text-slate-400">${l}</div></div>`).join('')}</div>`;
-  if (!A.soal.length) { list.innerHTML = `<div class="panel p-8 text-center text-slate-400">Belum ada soal. Pilih jenis soal di atas untuk mulai menambah.</div>`; return; }
-  list.innerHTML = A.soal.map((q, i) => `<div class="panel p-4 flex gap-4 items-start">
-    <div class="w-9 h-9 rounded-xl bg-slate-800 flex items-center justify-center font-bold flex-none">${i + 1}</div>
-    <div class="flex-1 min-w-0">
-      <div class="flex items-center gap-2 flex-wrap"><span class="badge ${JENIS[q.jenis][1]}">${JENIS[q.jenis][0]}</span><span class="text-xs text-slate-400">Bobot ${q.bobot}</span>${q.gambar ? icon('image', 'w-4 h-4 text-slate-400') : ''}</div>
-      <div class="rich mt-2 text-sm line-clamp-3">${richHtml(q.teks.length > 320 ? q.teks.slice(0, 320) + '...' : q.teks) || '<span class="text-slate-500">(hanya gambar)</span>'}</div>
-      <div class="text-xs text-slate-400 mt-2">${esc(keySummary(q))}</div></div>
-    <div class="flex flex-col gap-1 flex-none">
-      <div class="flex gap-1"><button class="btn btn-ghost btn-sm" data-up="${i}" ${i === 0 ? 'disabled' : ''} aria-label="Naikkan">${icon('chevron-up', 'w-4 h-4')}</button><button class="btn btn-ghost btn-sm" data-dn="${i}" ${i === A.soal.length - 1 ? 'disabled' : ''} aria-label="Turunkan">${icon('chevron-down', 'w-4 h-4')}</button></div>
-      <div class="flex gap-1"><button class="btn btn-ghost btn-sm" data-ed="${i}" aria-label="Ubah">${icon('pencil', 'w-4 h-4')}</button><button class="btn btn-ghost btn-sm" data-cp="${i}" aria-label="Gandakan">${icon('copy', 'w-4 h-4')}</button><button class="btn btn-ghost btn-sm" data-rm="${i}" aria-label="Hapus">${icon('trash-2', 'w-4 h-4 text-red-400')}</button></div></div></div>`).join('');
-  paint(); fillImgs(list);
-  const move = async (i, d) => {
-    const j = i + d; if (j < 0 || j >= A.soal.length) return;
-    const before = A.soal.slice(); [A.soal[i], A.soal[j]] = [A.soal[j], A.soal[i]]; drawSoalList();
-    try { const r = await api('adminReorderSoal', { token: S.token, idUjian: A.curExam, ids: A.soal.map(q => q.id) }); A.soal = r.soal; }
-    catch (e) { A.soal = before; drawSoalList(); toast('Urutan tidak berubah. ' + e.message, 'err'); }
-  };
-  list.querySelectorAll('[data-up]').forEach(b => b.onclick = () => move(+b.dataset.up, -1));
-  list.querySelectorAll('[data-dn]').forEach(b => b.onclick = () => move(+b.dataset.dn, 1));
-  list.querySelectorAll('[data-ed]').forEach(b => b.onclick = () => editSoal(A.soal[+b.dataset.ed]));
-  list.querySelectorAll('[data-cp]').forEach(b => b.onclick = async () => {
-    const q = A.soal[+b.dataset.cp];
-    try { const r = await api('adminSaveSoal', { token: S.token, idUjian: A.curExam, soal: { ...q, id: newQid() } }); A.soal = r.soal; drawSoalList(); toast('Soal digandakan di urutan terakhir', 'ok', 2500); } catch (e) { toast(e.message, 'err'); }
-  });
-  list.querySelectorAll('[data-rm]').forEach(b => b.onclick = async () => {
-    const q = A.soal[+b.dataset.rm], no = +b.dataset.rm + 1;
-    const r = await ask({ title: 'Hapus soal ' + no + '?', ic: 'trash-2', tone: 'bad', body: '<p>Soal dihapus dari ujian. Jawaban peserta untuk soal ini tidak lagi dihitung.</p>', actions: [{ id: 'no', label: 'Batal' }, { id: 'yes', label: 'Hapus', kind: 'btn-danger' }] });
-    if (r !== 'yes') return;
-    try { const res = await api('adminDeleteSoal', { token: S.token, idUjian: A.curExam, id: q.id }); A.soal = res.soal; drawSoalList(); toast('Soal dihapus', 'ok', 2000); } catch (e) { toast(e.message, 'err'); }
-  });
-}
-
-/* ---------- editor soal: toolbar matematika, gambar, pratinjau langsung ---------- */
-function editSoal(q, kind) {
-  const mk = id => ({ id, t: '', g: '' });
-  let E = q ? JSON.parse(JSON.stringify(q)) : (() => {
-    const k = kind;
-    return { id: '', jenis: k, teks: '', gambar: '', bobot: k === 'ESSAY' ? 10 : k === 'PGK' ? 2 : 1, aturan: k === 'PGK' ? 'semua' : k === 'BS' ? 'per' : '',
-      opsi: k === 'ESSAY' ? [] : k === 'BS' ? [mk('s1'), mk('s2')] : [mk('a'), mk('b'), mk('c'), mk('d')],
-      kunci: k === 'PG' ? 'a' : k === 'PGK' ? [] : k === 'BS' ? { s1: 'B', s2: 'S' } : '' };
-  })();
-  const bs = E.jenis === 'BS', maxOpt = bs ? 10 : 8, minOpt = bs ? 1 : 2;
-  const ids = bs ? Array.from({ length: 10 }, (_, i) => 's' + (i + 1)) : 'abcdefgh'.split('');
-  let palTab = 0, lastKey = '', pvT = null;
-  const getLast = () => { if (!lastKey) return null; if (lastKey === 'e-teks' || lastKey === 'e-kunci') return root.querySelector('#' + lastKey); return root.querySelector('[data-oi="' + lastKey.split(':')[1] + '"]'); };
-  const root = document.createElement('div');
-  root.className = 'fixed inset-0 z-[70] overflow-y-auto bg-slate-950/95 backdrop-blur-sm';
-  $('#modal-root').appendChild(root);
-  const close = () => { root.remove(); };
-  const sched = () => { clearTimeout(pvT); pvT = setTimeout(renderPreview, 180); };
-
-  function imgCtl(target, id) {
-    return id
-      ? `<div class="flex items-center gap-2 mt-2"><div class="rounded-lg overflow-hidden bg-white flex-none">${imgHtml(id, '!max-h-20 !mt-0 w-auto')}</div><button type="button" class="btn btn-ghost btn-sm" data-rmimg="${target}">${icon('x', 'w-4 h-4')} Hapus gambar</button></div>`
-      : `<div class="mt-2"><button type="button" class="btn btn-ghost btn-sm" data-pick="${target}">${icon('image-plus', 'w-4 h-4')} Tambah gambar</button><input type="file" accept="image/*" class="hidden" data-file="${target}"></div>`;
-  }
-  function draw() {
-    const title = (q ? 'Ubah soal' : 'Tambah soal') + ' - ' + JENIS[E.jenis][0];
-    const opts = (E.jenis === 'ESSAY') ? '' : `<div class="space-y-2" id="e-opts"><div class="lbl">${bs ? 'Pernyataan (tentukan Benar atau Salah)' : E.jenis === 'PG' ? 'Pilihan jawaban (pilih satu kunci)' : 'Pilihan jawaban (centang semua kunci)'}</div>
-      ${E.opsi.map((o, i) => {
-        const key = bs ? `<div class="flex gap-1 flex-none"><button type="button" class="btn btn-sm ${E.kunci[o.id] === 'B' ? 'btn-ok' : 'btn-ghost'}" data-bs="${o.id}:B">Benar</button><button type="button" class="btn btn-sm ${E.kunci[o.id] === 'S' ? 'btn-danger' : 'btn-ghost'}" data-bs="${o.id}:S">Salah</button></div>`
-          : E.jenis === 'PG' ? `<input type="radio" name="e-key" class="accent-emerald-500 w-5 h-5 flex-none mt-2" data-key="${o.id}" ${E.kunci === o.id ? 'checked' : ''} aria-label="Kunci ${String.fromCharCode(65 + i)}">`
-          : `<input type="checkbox" class="accent-emerald-500 w-5 h-5 flex-none mt-2" data-key="${o.id}" ${(E.kunci || []).includes(o.id) ? 'checked' : ''} aria-label="Kunci ${String.fromCharCode(65 + i)}">`;
-        return `<div class="panel p-3 flex gap-3 items-start"><div class="w-7 h-7 rounded-full bg-slate-800 flex items-center justify-center text-sm font-bold flex-none mt-1">${bs ? i + 1 : String.fromCharCode(65 + i)}</div>
-          <div class="flex-1 min-w-0"><textarea class="input rich-field" rows="2" data-oi="${i}" data-imgt="o:${i}" placeholder="${bs ? 'Tulis pernyataan' : 'Tulis pilihan jawaban'}">${esc(o.t)}</textarea>${imgCtl('o:' + i, o.g)}</div>${key}
-          <button type="button" class="btn btn-ghost btn-sm flex-none" data-del="${i}" ${E.opsi.length <= minOpt ? 'disabled' : ''} aria-label="Hapus">${icon('trash-2', 'w-4 h-4 text-red-400')}</button></div>`;
-      }).join('')}
-      <button type="button" class="btn btn-ghost btn-sm" data-addopt ${E.opsi.length >= maxOpt ? 'disabled' : ''}>${icon('plus', 'w-4 h-4')} Tambah ${bs ? 'pernyataan' : 'pilihan'}</button></div>`;
-    const aturan = E.jenis === 'PGK' ? `<div><label class="lbl" for="e-aturan">Aturan nilai</label><select id="e-aturan" class="input"><option value="semua" ${E.aturan === 'semua' ? 'selected' : ''}>Harus benar semua baru mendapat nilai</option><option value="sebagian" ${E.aturan === 'sebagian' ? 'selected' : ''}>Nilai sebagian (benar dikurangi salah)</option></select></div>`
-      : bs ? `<div><label class="lbl" for="e-aturan">Aturan nilai</label><select id="e-aturan" class="input"><option value="per" ${E.aturan === 'per' ? 'selected' : ''}>Nilai per pernyataan yang benar</option><option value="semua" ${E.aturan === 'semua' ? 'selected' : ''}>Semua pernyataan harus benar</option></select></div>` : '';
-    const ess = E.jenis === 'ESSAY' ? `<div><label class="lbl" for="e-kunci">Pedoman penilaian (hanya terlihat oleh guru)</label><textarea id="e-kunci" class="input rich-field" rows="3" placeholder="Poin-poin jawaban yang diharapkan">${esc(E.kunci || '')}</textarea></div>` : '';
-    root.innerHTML = `<div class="max-w-6xl mx-auto p-4 sm:p-6">
-      <div class="flex items-center gap-3 mb-4"><h2 class="text-xl font-bold flex-1">${esc(title)}</h2><button type="button" class="btn btn-ghost btn-sm" data-close>${icon('x', 'w-4 h-4')} Tutup</button></div>
-      <div class="grid lg:grid-cols-2 gap-6">
-        <div class="space-y-4">
-          <div class="panel p-3"><div id="e-palbar" class="flex flex-wrap gap-1 mb-2"></div><div id="e-palbtns" class="flex flex-wrap gap-1.5"></div>
-            <p class="text-xs text-slate-500 mt-2">Klik kolom teks lalu pilih simbol. Rumus ditulis di antara tanda $, misalnya $x^2+1$. Gambar bisa ditempel (Ctrl+V), diseret, atau dipilih dari tombol Tambah gambar.</p></div>
-          <div><label class="lbl" for="e-teks">Pertanyaan</label><textarea id="e-teks" class="input rich-field" rows="5" data-imgt="q" placeholder="Tulis pertanyaan di sini">${esc(E.teks)}</textarea>${imgCtl('q', E.gambar)}</div>
-          ${opts}${aturan}${ess}
-          <div class="grid grid-cols-2 gap-3"><div><label class="lbl" for="e-bobot">Bobot (poin)</label><input id="e-bobot" type="number" min="0.5" max="100" step="0.5" class="input" value="${E.bobot}"></div></div>
-          <div class="flex gap-2"><button type="button" class="btn btn-primary flex-1" id="e-save">${icon('save', 'w-4 h-4')} Simpan soal</button><button type="button" class="btn btn-ghost" data-close>Batal</button></div></div>
-        <div class="lg:sticky lg:top-4 h-fit"><div class="text-sm font-semibold text-slate-300 mb-2">Pratinjau (kunci ditandai hijau)</div><div id="e-prev" class="panel p-5"></div></div></div></div>`;
-    paint(); fillImgs(root); bind(); drawPal(); renderPreview();
-    loadImages([E.gambar, ...E.opsi.map(o => o.g)], undefined, root);
-  }
-  function drawPal() {                                  // palet dirender terpisah agar kolom yang sedang diketik tidak hilang
-    root.querySelector('#e-palbar').innerHTML = PALETTE.map((pl, i) => `<button type="button" class="badge ${i === palTab ? 'b-run' : 'b-off'}" data-pal="${i}">${pl[0]}</button>`).join('')
-      + `<span class="mx-1 w-px bg-slate-700"></span><button type="button" class="btn btn-ghost btn-sm !px-2.5 font-bold" data-fmt="**‸**" title="Tebal">B</button><button type="button" class="btn btn-ghost btn-sm !px-2.5 underline" data-fmt="__‸__" title="Garis bawah">U</button>`;
-    root.querySelector('#e-palbtns').innerHTML = PALETTE[palTab][1].map(([l, t], i) => `<button type="button" class="btn btn-ghost btn-sm !px-2.5 font-mono" data-sym="${i}" title="${esc(t)}">${esc(l)}</button>`).join('');
-    const target = () => getLast() || root.querySelector('#e-teks');
-    root.querySelectorAll('[data-pal]').forEach(b => { b.onmousedown = ev => ev.preventDefault(); b.onclick = () => { palTab = +b.dataset.pal; drawPal(); }; });
-    root.querySelectorAll('[data-sym]').forEach(b => { b.onmousedown = ev => ev.preventDefault(); b.onclick = () => insertSnippet(target(), PALETTE[palTab][1][+b.dataset.sym][1], true); });
-    root.querySelectorAll('[data-fmt]').forEach(b => { b.onmousedown = ev => ev.preventDefault(); b.onclick = () => insertSnippet(target(), b.dataset.fmt, false); });
-  }
-  function renderPreview() {
-    const box = root.querySelector('#e-prev'); if (!box) return;
-    const L = i => String.fromCharCode(65 + i);
-    let h = `<div class="rich text-base">${richHtml(E.teks) || '<span class="text-slate-500">Pertanyaan akan tampil di sini</span>'}</div>${imgHtml(E.gambar)}<div class="mt-3 space-y-2">`;
-    if (E.jenis === 'PG' || E.jenis === 'PGK') h += E.opsi.map((o, i) => { const on = E.jenis === 'PG' ? E.kunci === o.id : (E.kunci || []).includes(o.id);
-      return `<div class="opt ${E.jenis === 'PGK' ? 'opt-sq' : ''} ${on ? 'opt-key' : ''}"><span class="opt-mark">${L(i)}</span><span class="flex-1 rich">${richHtml(o.t) || '<span class="text-slate-500">-</span>'}${imgHtml(o.g)}</span>${on ? icon('check', 'w-5 h-5 text-emerald-300') : ''}</div>`; }).join('');
-    else if (bs) h += E.opsi.map((o, i) => `<div class="panel p-3 flex gap-3 items-start"><span class="text-slate-400 font-bold">${i + 1}.</span><div class="flex-1 rich">${richHtml(o.t) || '<span class="text-slate-500">-</span>'}${imgHtml(o.g)}</div><span class="badge ${E.kunci[o.id] === 'B' ? 'b-done' : 'b-lock'}">${E.kunci[o.id] === 'B' ? 'Benar' : 'Salah'}</span></div>`).join('');
-    else h += `<textarea class="input" rows="4" disabled placeholder="Siswa mengetik jawaban essay di sini"></textarea>${E.kunci ? `<div class="mt-2 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-sm"><div class="text-xs text-emerald-300 mb-1">Pedoman guru</div><div class="rich">${richHtml(E.kunci)}</div></div>` : ''}`;
-    box.innerHTML = h + '</div>'; paint(); fillImgs(box);
-  }
-  async function attach(target, file) {
-    try {
-      toast('Mengunggah gambar...', 'info', 1500);
-      const id = await uploadImage(file);
-      if (target === 'q') E.gambar = id; else E.opsi[+target.split(':')[1]].g = id;
-      draw();
-    } catch (e) { toast(e.message, 'err'); }
-  }
-  function bind() {
-    root.querySelectorAll('[data-close]').forEach(b => b.onclick = close);
-    root.querySelectorAll('.rich-field').forEach(f => f.addEventListener('focusin', () => { lastKey = f.id || ('oi:' + f.dataset.oi); }));
-    const teks = root.querySelector('#e-teks'); teks.oninput = () => { E.teks = teks.value; sched(); };
-    root.querySelectorAll('[data-oi]').forEach(f => f.oninput = () => { E.opsi[+f.dataset.oi].t = f.value; sched(); });
-    const kk = root.querySelector('#e-kunci'); if (kk) kk.oninput = () => { E.kunci = kk.value; sched(); };
-    const bo = root.querySelector('#e-bobot'); bo.oninput = () => { E.bobot = bo.value; };
-    const at = root.querySelector('#e-aturan'); if (at) at.onchange = () => { E.aturan = at.value; };
-    root.querySelectorAll('[data-key]').forEach(b => b.onchange = () => {
-      if (E.jenis === 'PG') E.kunci = b.dataset.key;
-      else { const s = new Set(E.kunci || []); b.checked ? s.add(b.dataset.key) : s.delete(b.dataset.key); E.kunci = [...s]; }
-      sched();
-    });
-    root.querySelectorAll('[data-bs]').forEach(b => b.onclick = () => { const [id, v] = b.dataset.bs.split(':'); E.kunci[id] = v; draw(); });
-    root.querySelectorAll('[data-del]').forEach(b => b.onclick = () => {
-      const o = E.opsi.splice(+b.dataset.del, 1)[0];
-      if (E.jenis === 'PG' && E.kunci === o.id) E.kunci = E.opsi[0].id; else if (E.jenis === 'PGK') E.kunci = (E.kunci || []).filter(x => x !== o.id); else if (bs) delete E.kunci[o.id];
-      draw();
-    });
-    const add = root.querySelector('[data-addopt]'); if (add) add.onclick = () => {
-      const id = ids.find(x => !E.opsi.some(o => o.id === x)); if (!id) return;
-      E.opsi.push(mk(id)); if (bs) E.kunci[id] = 'B'; draw();
-    };
-    root.querySelectorAll('[data-pick]').forEach(b => b.onclick = () => b.parentElement.querySelector('input[type=file]').click());
-    root.querySelectorAll('input[data-file]').forEach(f => f.onchange = () => { if (f.files[0]) attach(f.dataset.file, f.files[0]); });
-    root.querySelectorAll('[data-rmimg]').forEach(b => b.onclick = () => { const t = b.dataset.rmimg; if (t === 'q') E.gambar = ''; else E.opsi[+t.split(':')[1]].g = ''; draw(); });
-    root.querySelectorAll('[data-imgt]').forEach(f => {
-      f.addEventListener('paste', ev => { const it = [...(ev.clipboardData ? ev.clipboardData.items : [])].find(i => i.type.indexOf('image/') === 0); if (it) { ev.preventDefault(); attach(f.dataset.imgt, it.getAsFile()); } });
-      f.addEventListener('dragover', ev => ev.preventDefault());
-      f.addEventListener('drop', ev => { const file = ev.dataTransfer && ev.dataTransfer.files[0]; if (file && /^image\//.test(file.type)) { ev.preventDefault(); attach(f.dataset.imgt, file); } });
-    });
-    root.querySelector('#e-save').onclick = save;
-  }
-  async function save() {
-    const btn = root.querySelector('#e-save'); busy(btn, true, 'Menyimpan...');
-    if (!E.id) E.id = newQid();                                         // dibuat di sini agar pengulangan tidak menggandakan soal
-    const soal = { id: E.id, jenis: E.jenis, teks: E.teks, gambar: E.gambar, bobot: Number(E.bobot), aturan: E.aturan, opsi: E.opsi, kunci: E.kunci };
-    try {
-      const r = await api('adminSaveSoal', { token: S.token, idUjian: A.curExam, soal });
-      A.soal = r.soal; close(); drawSoalList(); toast('Soal tersimpan', 'ok', 2000);
-    } catch (e) { toast(e.message, 'err'); busy(btn, false); }
-  }
-  draw();
-}
-
-/* ======================================================================
- *  GURU: HASIL UJIAN, PENILAIAN ESSAY, UNDUH CSV
- * ====================================================================== */
-async function renderHasil() {
-  const ex = A.exams.find(x => x.id === A.curExam); if (!ex) return setTab('ujian');
-  $('#tab').innerHTML = `<div class="space-y-4">
-    <div class="flex items-center gap-3 flex-wrap"><button id="hs-back" class="btn btn-ghost btn-sm">${icon('arrow-left', 'w-4 h-4')} Daftar ujian</button>
-      <div><div class="text-lg font-bold">Hasil: ${esc(ex.nama)}</div><div class="text-xs text-slate-400">${esc(ex.sekolah)}</div></div>
-      <div class="ml-auto flex gap-2 flex-wrap"><button id="hs-soal" class="btn btn-ghost btn-sm">${icon('list-checks', 'w-4 h-4')} Kelola soal</button>
-        <button id="hs-ref" class="btn btn-ghost btn-sm">${icon('refresh-cw', 'w-4 h-4')} Muat ulang</button><button id="hs-csv" class="btn btn-primary btn-sm">${icon('download', 'w-4 h-4')} Unduh CSV</button></div></div>
-    <div id="hs-body"><div class="panel p-8 text-center text-slate-400">Memuat hasil...</div></div></div>`;
-  paint();
-  $('#hs-back').onclick = () => setTab('ujian'); $('#hs-soal').onclick = () => openSoal(ex.id);
-  $('#hs-ref').onclick = loadHasil; $('#hs-csv').onclick = unduhCsv;
-  loadHasil();
-}
-async function loadHasil() {
-  try { A.hasil = await api('adminGetHasil', { token: S.token, idUjian: A.curExam }); drawHasil(); }
-  catch (e) { toast(e.message, 'err'); const b = $('#hs-body'); if (b) b.innerHTML = `<div class="panel p-8 text-center text-red-300">${esc(e.message)}</div>`; }
-}
-function drawHasil() {
-  const r = A.hasil, box = $('#hs-body'); if (!r || !box) return;
-  const rows = r.rows.slice().sort((a, b) => String(a.nama).localeCompare(String(b.nama), 'id'));
-  const nil = rows.map(x => x.nilai), avg = nil.length ? Math.round(nil.reduce((s, v) => s + v, 0) / nil.length * 10) / 10 : 0, pend = rows.reduce((s, x) => s + x.belum, 0);
-  const stat = [['Peserta', rows.length], ['Rata-rata nilai', avg], ['Tertinggi', nil.length ? Math.max(...nil) : 0], ['Terendah', nil.length ? Math.min(...nil) : 0], ['Essay menunggu nilai', pend]];
-  box.innerHTML = `<div class="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-4">${stat.map(([l, v]) => `<div class="panel p-3"><div class="text-2xl font-extrabold ${l.startsWith('Essay') && v ? 'text-amber-300' : ''}">${v}</div><div class="text-xs text-slate-400">${l}</div></div>`).join('')}</div>
-    <section class="panel p-4 overflow-x-auto"><table class="t"><thead><tr><th>Peserta</th><th>Kelas</th><th>Status</th><th>Skor otomatis</th><th>Essay</th><th>Total</th><th>Nilai</th><th></th></tr></thead><tbody>
-    ${rows.length ? rows.map(x => `<tr><td><div class="font-semibold">${esc(x.nama)}</div><div class="text-xs text-slate-500">${esc(x.nomor)}</div></td><td>${esc(x.kelas)}</td>
-      <td><span class="badge ${x.status === 'Terkunci' ? 'b-lock' : x.status === 'Sedang Mengerjakan' ? 'b-run' : 'b-done'}">${esc(x.status)}</span>${x.pelanggaran ? `<div class="text-xs text-amber-300 mt-1">${x.pelanggaran} pelanggaran</div>` : ''}</td>
-      <td>${x.auto}</td><td>${x.belum ? `<span class="badge b-lock">${x.belum} belum dinilai</span>` : x.essay}</td><td>${x.total} / ${x.maks}</td><td class="font-extrabold">${x.nilai}</td>
-      <td class="text-right whitespace-nowrap"><button class="btn btn-ghost btn-sm" data-jw="${esc(x.nomor)}">${icon('eye', 'w-4 h-4')} Jawaban</button></td></tr>`).join('')
-      : `<tr><td colspan="8" class="text-center text-slate-500 py-8">Belum ada peserta yang mengerjakan.</td></tr>`}</tbody></table></section>
-    <h3 class="text-lg font-bold mt-6 mb-2">Analisis butir soal</h3>
-    <section class="panel p-4 overflow-x-auto"><table class="t"><thead><tr><th>No</th><th>Jenis</th><th>Soal</th><th>Benar</th><th>Sebagian</th><th>Salah</th><th>Kosong</th><th>Tingkat benar</th></tr></thead><tbody>
-    ${r.soal.map(s => { const t = s.stat, n = t.n || 0, pct = s.jenis === 'ESSAY' ? null : n ? Math.round(t.benar / n * 100) : 0;
-      return `<tr><td>${s.no}</td><td><span class="badge ${JENIS[s.jenis][1]}">${JENIS[s.jenis][0]}</span></td><td class="max-w-md"><div class="rich text-sm line-clamp-2">${richHtml(s.teks)}</div></td>
-      <td>${s.jenis === 'ESSAY' ? '-' : t.benar}</td><td>${s.jenis === 'ESSAY' ? '-' : t.sebagian}</td><td>${s.jenis === 'ESSAY' ? '-' : t.salah}</td><td>${t.kosong}</td>
-      <td>${pct === null ? `<span class="text-xs text-slate-400">${t.dinilai} dinilai, ${t.menunggu} menunggu</span>` : `<span class="font-bold ${pct < 40 ? 'text-red-300' : pct < 70 ? 'text-amber-300' : 'text-emerald-300'}">${pct}%</span>`}</td></tr>`; }).join('')}</tbody></table></section>`;
-  paint();
-  box.querySelectorAll('[data-jw]').forEach(b => b.onclick = () => openJawaban(b.dataset.jw));
-}
-async function openJawaban(nomor) {
-  let r;
-  try { r = await api('adminGetJawaban', { token: S.token, idUjian: A.curExam, nomor }); } catch (e) { toast(e.message, 'err'); return; }
-  const root = document.createElement('div');
-  root.className = 'fixed inset-0 z-[70] overflow-y-auto bg-slate-950/95 backdrop-blur-sm';
-  $('#modal-root').appendChild(root);
-  const L = i => String.fromCharCode(65 + i), hasEssay = r.detail.some(d => d.jenis === 'ESSAY');
-  const ans = d => {
-    if (d.jenis === 'PG' || d.jenis === 'PGK') {
-      const sel = d.jenis === 'PG' ? (d.jawaban ? [d.jawaban] : []) : (d.jawaban || []), key = d.jenis === 'PG' ? [d.kunci] : d.kunci;
-      return d.opsi.map((o, i) => { const s = sel.includes(o.id), k = key.includes(o.id);
-        return `<div class="opt ${s && k ? 'opt-key' : s ? 'opt-bad' : k ? 'opt-keyline' : ''} mt-2"><span class="opt-mark">${L(i)}</span><span class="flex-1 rich">${richHtml(o.t)}${imgHtml(o.g)}</span><span class="text-xs">${s ? 'Dipilih' : ''}${s && k ? ' - ' : ''}${k ? 'Kunci' : ''}</span></div>`; }).join('');
-    }
-    if (d.jenis === 'BS') return d.opsi.map((o, i) => { const a = d.jawaban && d.jawaban[o.id], k = d.kunci[o.id], nm = v => v === 'B' ? 'Benar' : v === 'S' ? 'Salah' : '(kosong)';
-      return `<div class="panel p-3 mt-2 flex gap-3 items-start"><span class="text-slate-400 font-bold">${i + 1}.</span><div class="flex-1 rich">${richHtml(o.t)}${imgHtml(o.g)}</div><div class="text-xs text-right flex-none"><div class="${a === k ? 'text-emerald-300' : 'text-red-300'} font-bold">Jawaban: ${nm(a)}</div><div class="text-slate-400">Kunci: ${nm(k)}</div></div></div>`; }).join('');
-    return `<div class="mt-2 p-3 rounded-lg bg-slate-800/70 border border-slate-700 whitespace-pre-wrap text-sm">${d.jawaban ? esc(d.jawaban) : '<span class="text-slate-500">(tidak dijawab)</span>'}</div>
-      ${d.kunci ? `<div class="mt-2 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-sm"><div class="text-xs text-emerald-300 mb-1">Pedoman penilaian</div><div class="rich">${richHtml(d.kunci)}</div></div>` : ''}
-      <div class="mt-3 flex items-center gap-2"><label class="text-sm text-slate-300" for="es-${esc(d.id)}">Skor essay</label><input id="es-${esc(d.id)}" data-es="${esc(d.id)}" type="number" min="0" max="${d.bobot}" step="0.5" class="input !w-28" value="${d.skorEssay === null ? '' : d.skorEssay}" placeholder="0 - ${d.bobot}"><span class="text-sm text-slate-400">dari ${d.bobot}</span></div>`;
-  };
-  const stCls = { benar: 'b-done', sebagian: 'b-run', salah: 'b-lock', kosong: 'b-off', menunggu: 'b-lock', dinilai: 'b-done' };
-  root.innerHTML = `<div class="max-w-3xl mx-auto p-4 sm:p-6">
-    <div class="flex items-center gap-3 flex-wrap mb-4"><div class="flex-1 min-w-0"><h2 class="text-xl font-bold truncate">${esc(r.peserta.nama)}</h2><div class="text-sm text-slate-400">${esc(r.peserta.kelas)} - ${esc(r.peserta.nomor)}</div></div>
-      <div class="text-right"><div class="text-3xl font-extrabold" id="jw-nilai">${r.ringkas.nilai}</div><div class="text-xs text-slate-400" id="jw-sum">${r.ringkas.total} dari ${r.ringkas.maks} poin${r.ringkas.belum ? ` - ${r.ringkas.belum} essay belum dinilai` : ''}</div></div>
-      <button class="btn btn-ghost btn-sm" data-close>${icon('x', 'w-4 h-4')} Tutup</button></div>
-    <div class="space-y-4">${r.detail.map(d => `<div class="panel p-4"><div class="flex items-center gap-2 flex-wrap mb-2"><span class="badge b-off">Soal ${d.no}</span><span class="badge ${JENIS[d.jenis][1]}">${JENIS[d.jenis][0]}</span>
-      <span class="badge ${stCls[d.status]}">${d.status}</span><span class="ml-auto text-sm font-bold">${d.poin === null ? '-' : d.poin} / ${d.bobot}</span></div>
-      <div class="rich">${richHtml(d.teks)}</div>${imgHtml(d.gambar)}${ans(d)}</div>`).join('')}</div>
-    ${hasEssay ? `<div class="sticky bottom-0 py-3 bg-slate-950/90 flex gap-2 flex-wrap"><button class="btn btn-primary" id="jw-save">${icon('save', 'w-4 h-4')} Simpan nilai essay</button><button class="btn btn-ghost" id="jw-next">Simpan dan peserta berikutnya ${icon('chevron-right', 'w-4 h-4')}</button></div>` : ''}</div>`;
-  paint(); fillImgs(root);
-  loadImages(imageIdsOf(r.detail), undefined, root);
-  const close = () => { root.remove(); loadHasil(); };
-  root.querySelector('[data-close]').onclick = close;
-  const save = async () => {
-    const skor = {}; root.querySelectorAll('[data-es]').forEach(i => { skor[i.dataset.es] = i.value === '' ? '' : Number(i.value); });
-    const res = await api('adminNilaiEssay', { token: S.token, idUjian: A.curExam, nomor, skor });
-    root.querySelector('#jw-nilai').textContent = res.ringkas.nilai;
-    root.querySelector('#jw-sum').textContent = `${res.ringkas.total} dari ${res.ringkas.maks} poin${res.ringkas.belum ? ` - ${res.ringkas.belum} essay belum dinilai` : ''}`;
-    toast('Nilai essay tersimpan', 'ok', 1800); return res;
-  };
-  const sv = root.querySelector('#jw-save'); if (sv) sv.onclick = async () => { try { await save(); } catch (e) { toast(e.message, 'err'); } };
-  const nx = root.querySelector('#jw-next'); if (nx) nx.onclick = async () => {
-    try {
-      await save();
-      const rows = A.hasil.rows.slice().sort((a, b) => String(a.nama).localeCompare(String(b.nama), 'id')), i = rows.findIndex(x => x.nomor === nomor);
-      const order = [...rows.slice(i + 1), ...rows.slice(0, i)], nxt = order.find(x => x.belum > 0 && x.nomor !== nomor) || null;
-      root.remove();
-      if (nxt) { await loadHasil(); openJawaban(nxt.nomor); } else { toast('Tidak ada peserta lain yang essay-nya belum dinilai.', 'info', 4000); loadHasil(); }
-    } catch (e) { toast(e.message, 'err'); }
-  };
-}
-function unduhCsv() {
-  const r = A.hasil; if (!r) return toast('Data hasil belum dimuat.', 'warn');
-  const cell = v => { let s = typeof v === 'number' ? String(v).replace('.', ',') : String(v == null ? '' : v); if (typeof v === 'string' && /^[=+\-@]/.test(s)) s = "'" + s; return /[;"\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-  const rows = r.rows.slice().sort((a, b) => String(a.nama).localeCompare(String(b.nama), 'id'));
-  const head = ['No', 'Nomor Peserta', 'Nama', 'Kelas', 'Status', 'Pelanggaran', 'Skor Otomatis', 'Skor Essay', 'Total', 'Maksimal', 'Nilai (0-100)', ...r.soal.map(s => `S${s.no} (${s.jenis}, maks ${s.bobot})`)];
-  const body = rows.map((x, i) => [i + 1, x.nomor, x.nama, x.kelas, x.status, x.pelanggaran, x.auto, x.essay, x.total, x.maks, x.nilai, ...x.poinSoal.map(p => p == null ? 'menunggu' : p)]);
-  const csv = '\ufeff' + [head, ...body].map(l => l.map(cell).join(';')).join('\r\n');          // titik koma + BOM: terbuka rapi di Excel Indonesia
-  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-  a.download = 'hasil-' + String(r.ujian.nama).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '.csv';
-  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 3000);
-}
-
-/* ======================================================================
  *  MODE DEMO (aktif jika API_URL kosong) - meniru perilaku Code.gs
  *  Akun demo: siswa 1001 / siswa123 (SMA Nusantara); admin / admin123
  * ====================================================================== */
-const str_ = v => String(v == null ? '' : v).trim();
-/* ===== INTI SOAL INTERNAL: fungsi murni (sama persis di server dan mode demo) ===== */
-function parseJson_(v, d) { try { const x = JSON.parse(String(v)); return x === undefined || x === null ? d : x; } catch (e) { return d; } }
-function hashStr_(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
-function rng_(seed) {
-  let a = seed >>> 0;
-  return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
-}
-function shuffle_(arr, seedStr) {                                   // acak tetap: peserta yang sama selalu mendapat urutan yang sama
-  const a = arr.slice(), r = rng_(hashStr_(seedStr));
-  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)), t = a[i]; a[i] = a[j]; a[j] = t; }
-  return a;
-}
-function parseOpsiUjian_(v) {
-  const o = (v && typeof v === 'object') ? v : parseJson_(v, {});
-  return { acakSoal: !!o.acakSoal, acakOpsi: !!o.acakOpsi, tampilNilai: o.tampilNilai === undefined ? true : !!o.tampilNilai };
-}
-const IMG_RE_ = /^IMG-[A-Za-z0-9]{4,30}$/;
-
-/* Validasi soal dari guru. Mengembalikan soal bersih atau melempar pesan galat yang jelas. */
-function cleanSoal_(s) {
-  const jenis = str_(s.jenis).toUpperCase();
-  if (['PG', 'PGK', 'BS', 'ESSAY'].indexOf(jenis) < 0) throw new Error('Jenis soal tidak valid.');
-  const teks = String(s.teks === undefined || s.teks === null ? '' : s.teks).slice(0, 4000), gambar = str_(s.gambar);
-  if (gambar && !IMG_RE_.test(gambar)) throw new Error('Gambar tidak valid.');
-  if (!teks.trim() && !gambar) throw new Error('Isi pertanyaan atau tambahkan gambar.');
-  let bobot = Number(s.bobot);
-  if (!(bobot > 0 && bobot <= 100)) throw new Error('Bobot harus lebih dari 0 dan paling banyak 100.');
-  bobot = Math.round(bobot * 100) / 100;
-  let opsi = [], kunci = null, aturan = '';
-  if (jenis === 'ESSAY') kunci = String(s.kunci === undefined || s.kunci === null ? '' : s.kunci).slice(0, 2000);
-  else {
-    const src = Array.isArray(s.opsi) ? s.opsi : [], bs = jenis === 'BS', seen = {};
-    if (src.length < (bs ? 1 : 2) || src.length > (bs ? 10 : 8)) throw new Error(bs ? 'Jumlah pernyataan Benar/Salah harus 1 sampai 10.' : 'Jumlah pilihan jawaban harus 2 sampai 8.');
-    opsi = src.map(function (o) {
-      const id = str_(o.id), t = String(o.t === undefined || o.t === null ? '' : o.t).slice(0, 1000), g = str_(o.g);
-      if (!(bs ? /^s([1-9]|10)$/ : /^[a-h]$/).test(id) || seen[id]) throw new Error('ID pilihan tidak valid.');
-      seen[id] = 1;
-      if (g && !IMG_RE_.test(g)) throw new Error('Gambar pilihan tidak valid.');
-      if (!t.trim() && !g) throw new Error(bs ? 'Setiap pernyataan harus berisi teks atau gambar.' : 'Setiap pilihan harus berisi teks atau gambar.');
-      return { id: id, t: t, g: g };
-    });
-    if (jenis === 'PG') {
-      if (!seen[str_(s.kunci)]) throw new Error('Pilih satu kunci jawaban.');
-      kunci = str_(s.kunci);
-    } else if (jenis === 'PGK') {
-      const k = (Array.isArray(s.kunci) ? s.kunci : []).map(str_).filter(function (x, i, a) { return a.indexOf(x) === i; });
-      if (!k.length || k.some(function (x) { return !seen[x]; })) throw new Error('Pilih minimal satu kunci jawaban.');
-      kunci = k.sort(); aturan = s.aturan === 'sebagian' ? 'sebagian' : 'semua';
-    } else {
-      const k = s.kunci && typeof s.kunci === 'object' ? s.kunci : {};
-      kunci = {};
-      opsi.forEach(function (o) { if (k[o.id] !== 'B' && k[o.id] !== 'S') throw new Error('Tentukan Benar atau Salah untuk setiap pernyataan.'); kunci[o.id] = k[o.id]; });
-      aturan = s.aturan === 'semua' ? 'semua' : 'per';
-    }
-  }
-  return { jenis: jenis, teks: teks, gambar: gambar, opsi: opsi, kunci: kunci, bobot: bobot, aturan: aturan };
-}
-
-/* Jawaban dari peserta dibersihkan menurut jenis soal; yang tidak valid dibuang. */
-function cleanAnswers_(soal, raw) {
-  const out = {}; raw = raw && typeof raw === 'object' ? raw : {};
-  soal.forEach(function (q) {
-    const a = raw[q.id]; if (a === undefined || a === null) return;
-    const ids = (q.opsi || []).map(function (o) { return o.id; });
-    if (q.jenis === 'PG') { if (ids.indexOf(String(a)) > -1) out[q.id] = String(a); }
-    else if (q.jenis === 'PGK') {
-      const sel = (Array.isArray(a) ? a : []).map(String).filter(function (x, i, arr) { return ids.indexOf(x) > -1 && arr.indexOf(x) === i; });
-      if (sel.length) out[q.id] = sel.sort();
-    } else if (q.jenis === 'BS') {
-      const m = {}; ids.forEach(function (id) { if (a[id] === 'B' || a[id] === 'S') m[id] = a[id]; });
-      if (Object.keys(m).length) out[q.id] = m;
-    } else if (q.jenis === 'ESSAY') { const t = String(a).slice(0, 1500); if (t.trim()) out[q.id] = t; }
-  });
-  return out;
-}
-
-/* Penilaian satu soal otomatis (essay dinilai guru). */
-function gradeSoal_(q, ans) {
-  const maks = Number(q.bobot) || 0;
-  if (q.jenis === 'ESSAY') return { poin: null, maks: maks, status: 'menunggu' };
-  const kosong = ans === undefined || ans === null || ans === '' || (Array.isArray(ans) && !ans.length) || (typeof ans === 'object' && !Array.isArray(ans) && !Object.keys(ans).length);
-  if (kosong) return { poin: 0, maks: maks, status: 'kosong' };
-  let frac = 0;
-  if (q.jenis === 'PG') frac = String(ans) === String(q.kunci) ? 1 : 0;
-  else if (q.jenis === 'PGK') {
-    const key = q.kunci || [], sel = Array.isArray(ans) ? ans : [];
-    const ok = sel.filter(function (x) { return key.indexOf(x) > -1; }).length, bad = sel.length - ok;
-    frac = q.aturan === 'sebagian' ? Math.max(0, (ok - bad) / key.length) : (ok === key.length && bad === 0 ? 1 : 0);
-  } else if (q.jenis === 'BS') {
-    const ids = (q.opsi || []).map(function (o) { return o.id; }), key = q.kunci || {};
-    const ok = ids.filter(function (id) { return ans[id] && ans[id] === key[id]; }).length;
-    frac = q.aturan === 'semua' ? (ok === ids.length ? 1 : 0) : ok / ids.length;
-  }
-  return { poin: Math.round(frac * maks * 100) / 100, maks: maks, status: frac === 1 ? 'benar' : frac > 0 ? 'sebagian' : 'salah' };
-}
-
-/* Rekap nilai satu peserta: skor otomatis + skor essay dari guru. */
-function hitung_(soal, ans, essay) {
-  let auto = 0, ess = 0, maks = 0, belum = 0;
-  const detail = soal.map(function (q) {
-    const g = gradeSoal_(q, ans[q.id]);
-    maks += g.maks;
-    if (q.jenis === 'ESSAY') {
-      const a = String(ans[q.id] || '').trim(), sv = essay ? essay[q.id] : undefined;
-      if (sv !== undefined && sv !== null && sv !== '') { const p = Math.min(g.maks, Math.max(0, Number(sv) || 0)); ess += p; return { id: q.id, poin: p, maks: g.maks, status: 'dinilai' }; }
-      if (a) { belum++; return { id: q.id, poin: null, maks: g.maks, status: 'menunggu' }; }
-      return { id: q.id, poin: 0, maks: g.maks, status: 'kosong' };
-    }
-    auto += g.poin;
-    return { id: q.id, poin: g.poin, maks: g.maks, status: g.status };
-  });
-  const r2 = function (x) { return Math.round(x * 100) / 100; }, total = r2(auto + ess);
-  return { auto: r2(auto), essay: r2(ess), total: total, maks: r2(maks), nilai: maks ? Math.round(total / maks * 1000) / 10 : 0, belum: belum, detail: detail };
-}
-
-/* Soal yang dikirim ke peserta: tanpa kunci, tanpa pedoman; urutan diacak bila diminta. */
-function soalUntukSiswa_(soal, seed, op) {
-  let list = soal.slice();
-  if (op && op.acakSoal) list = shuffle_(list, seed + '|q');
-  return list.map(function (q) {
-    let opsi = q.opsi || [];
-    if (op && op.acakOpsi && (q.jenis === 'PG' || q.jenis === 'PGK')) opsi = shuffle_(opsi, seed + '|o|' + q.id);
-    return { id: q.id, jenis: q.jenis, teks: q.teks, gambar: q.gambar, opsi: opsi.map(function (o) { return { id: o.id, t: o.t, g: o.g }; }) };
-  });
-}
-
 const demoDefault = () => ({
   schools: ['SMA Nusantara', 'SMK Nusantara Jaya'],
   siswa: [{ sekolah: 'SMA Nusantara', nama: 'Aisyah Putri', nomor: '1001', kelas: 'XII IPA 1', password: 'siswa123' },
@@ -1674,8 +958,8 @@ function demoApi(a, p) { return new Promise((ok, no) => setTimeout(() => { try {
 function demoRun(a, p) {
   const dMs = s => s ? new Date(s).getTime() : null;                       // demo: jadwal dibaca dalam zona waktu browser
   const dState = (e, now = Date.now()) => calcState({ status: e.status, mulaiMs: dMs(e.mulai), selesaiMs: dMs(e.selesai) }, now);
-  const dPub = e => ({ id: e.id, sekolah: e.sekolah, nama: e.nama, batas: e.batas, durasi: e.durasi, status: e.status, state: dState(e), mulaiMs: dMs(e.mulai), selesaiMs: dMs(e.selesai), perluToken: !!e.token, kelas: e.kelas || '', sumber: e.sumber === 'internal' ? 'internal' : 'form', opsiUjian: parseOpsiUjian_(e.opsiUjian) });
-  const dFull = e => ({ ...e, mulai: e.mulai || '', selesai: e.selesai || '', token: e.token || '', ...dPub(e), jumlahSoal: (D.soal || []).filter(q => q.idUjian === e.id).length });
+  const dPub = e => ({ id: e.id, sekolah: e.sekolah, nama: e.nama, batas: e.batas, durasi: e.durasi, status: e.status, state: dState(e), mulaiMs: dMs(e.mulai), selesaiMs: dMs(e.selesai), perluToken: !!e.token, kelas: e.kelas || '' });
+  const dFull = e => ({ ...e, mulai: e.mulai || '', selesai: e.selesai || '', token: e.token || '', ...dPub(e) });
   const meta = () => ({ serverNow: Date.now(), tz: Intl.DateTimeFormat().resolvedOptions().timeZone, tzLabel: '' });
   const listFor = s => {
     const out = []; D.ext = D.ext || {};
@@ -1691,11 +975,6 @@ function demoRun(a, p) {
   const admin = () => { if (p.token !== 'demo-admin') throw new Error('Sesi berakhir. Silakan login kembali.'); };
   const log = (id, no) => D.logs.find(l => l.idUjian === id && l.nomor === no);
   const exam = id => D.exams.find(x => x.id === id);
-  const needExam = id => { const e = exam(id); if (!e) throw new Error('Ujian tidak ditemukan.'); return e; };
-  const soalOf = id => (D.soal = D.soal || []).filter(q => q.idUjian === id).sort((a, b) => a.urut - b.urut).map(({ idUjian, ...q }) => q);
-  const soalPay = id => { const e = exam(id) || {}; return { soal: soalOf(id), ujian: { id, nama: e.nama || '', sumber: e.sumber || 'form', opsiUjian: parseOpsiUjian_(e.opsiUjian) } }; };
-  const findJ = (id, no) => (D.jawab = D.jawab || []).find(j => j.idUjian === id && j.nomor === no);
-  const ensureJ = (id, s) => findJ(id, s.nomor) || (D.jawab.push({ idUjian: id, nomor: s.nomor, nama: s.nama, kelas: s.kelas, sekolah: s.sekolah, jawaban: {}, ragu: [], essay: {} }), findJ(id, s.nomor));
   const rem = (l, e) => { const sel = dMs(e.selesai); const end = !l.extra && sel != null && sel < l.endAt ? sel : l.endAt; return Math.max(0, Math.floor((end - Date.now()) / 1000)); };
   const state = (l, e) => { if (l.status === 'Sedang Mengerjakan' && rem(l, e) <= 0) l.status = 'Selesai (Waktu Habis)'; l.seen = Date.now(); dsave();
     return { status: l.status, violations: l.pelanggaran, remainingSec: rem(l, e), batas: e.batas, examActive: e.status === 'Aktif' }; };
@@ -1711,7 +990,6 @@ function demoRun(a, p) {
       if (st === 'Nonaktif') throw new Error('Ujian sedang dinonaktifkan oleh admin.');
       if (st === 'Terjadwal') throw new Error('Ujian belum dibuka.');
       let l = log(e.id, s.nomor);
-      if (e.sumber === 'internal' && !soalOf(e.id).length) throw new Error('Ujian belum memiliki soal. Hubungi guru.');
       if (!l) {
         if (st === 'Selesai') throw new Error('Waktu ujian sudah ditutup.');
         if (!kelasMatch(e.kelas, s.kelas)) throw new Error('Ujian ini bukan untuk kelas Anda.');
@@ -1720,24 +998,12 @@ function demoRun(a, p) {
         const cap = dMs(e.selesai) == null ? Infinity : dMs(e.selesai);
         l = { idUjian: e.id, sekolah: s.sekolah, nomor: s.nomor, nama: s.nama, kelas: s.kelas, pelanggaran: 0, status: 'Sedang Mengerjakan', terakhir: '', endAt: Math.min(Date.now() + e.durasi * 60000, cap), seen: Date.now() }; D.logs.push(l);
       }
-      const r = state(l, e); r.exam = { id: e.id, nama: e.nama, sekolah: e.sekolah, durasi: e.durasi };
-      if (r.status === 'Sedang Mengerjakan') {
-        if (e.sumber === 'internal') { const j = ensureJ(e.id, s); r.mode = 'internal'; r.opsiUjian = parseOpsiUjian_(e.opsiUjian); r.soal = soalUntukSiswa_(soalOf(e.id), s.nomor + '|' + e.id, r.opsiUjian); r.jawaban = j.jawaban; r.ragu = j.ragu; }
-        else r.link = normForm(e.link);
-      }
-      return r; }
+      const r = state(l, e); r.exam = { id: e.id, nama: e.nama, sekolah: e.sekolah, durasi: e.durasi }; if (r.status === 'Sedang Mengerjakan') r.link = normForm(e.link); return r; }
     case 'heartbeat': { const s = sUser(), e = exam(p.idUjian), l = e && log(e.id, s.nomor); if (!l) throw new Error('Sesi ujian tidak ditemukan.');
       if (l.status === 'Sedang Mengerjakan' && (p.clientViolations || 0) > l.pelanggaran) { l.pelanggaran = p.clientViolations; if (l.pelanggaran >= e.batas) l.status = 'Terkunci'; } return state(l, e); }
     case 'violation': { const s = sUser(), e = exam(p.idUjian), l = e && log(e.id, s.nomor); if (!l) throw new Error('Sesi ujian tidak ditemukan.');
       if (l.status === 'Sedang Mengerjakan') { l.pelanggaran = Math.max(l.pelanggaran + 1, p.clientViolations || 0); l.terakhir = p.type; if (l.pelanggaran >= e.batas) l.status = 'Terkunci'; } return state(l, e); }
-    case 'finish': { const s = sUser(), e = exam(p.idUjian), l = e && log(e.id, s.nomor), internal = !!e && e.sumber === 'internal';
-      const running = !!l && l.status === 'Sedang Mengerjakan', grace = !!l && internal && /Waktu Habis/.test(l.status) && Date.now() - l.endAt <= 60000;
-      if (internal && p.jawaban && (running || grace)) { const j = ensureJ(e.id, s), soal = soalOf(e.id); j.jawaban = cleanAnswers_(soal, p.jawaban); j.ragu = (p.ragu || []).filter(id => soal.some(q => q.id === id)); }
-      if (running) l.status = p.reason === 'timeout' ? 'Selesai (Waktu Habis)' : 'Selesai';
-      dsave(); const res = { status: l && l.status };
-      if (internal && parseOpsiUjian_(e.opsiUjian).tampilNilai) { const soal = soalOf(e.id), j = findJ(e.id, s.nomor), hh = hitung_(soal.filter(q => q.jenis !== 'ESSAY'), j ? j.jawaban : {}, {});
-        res.hasil = { poin: hh.auto, maks: hh.maks, nilai: hh.nilai, adaEssay: soal.some(q => q.jenis === 'ESSAY'), maksEssay: soal.filter(q => q.jenis === 'ESSAY').reduce((t, q) => t + q.bobot, 0) }; }
-      return res; }
+    case 'finish': { const s = sUser(), e = exam(p.idUjian), l = e && log(e.id, s.nomor); if (l && l.status === 'Sedang Mengerjakan') l.status = p.reason === 'timeout' ? 'Selesai (Waktu Habis)' : 'Selesai'; dsave(); return { status: l && l.status }; }
     case 'loginAdmin': if (p.username !== 'admin' || p.password !== 'admin123') throw new Error('Username/NIP atau password salah.');
       return { token: 'demo-admin', user: { nama: 'Bu Ratna (demo)', username: 'admin', sekolah: '*' } };
     case 'adminMeta': admin(); return { schools: [...new Set([...D.schools, ...D.exams.map(e => e.sekolah)])].sort() };
@@ -1746,46 +1012,8 @@ function demoRun(a, p) {
       if (x.mulai && x.selesai && dMs(x.selesai) <= dMs(x.mulai)) throw new Error('Jadwal selesai harus setelah jadwal mulai.');
       const token = String(x.token || '').toUpperCase().replace(/\s+/g, '');
       if (token && !/^[A-Z0-9]{3,12}$/.test(token)) throw new Error('Token harus 3 sampai 12 karakter, hanya huruf dan angka.');
-      const rec = { id: x.id || 'UJ-' + Math.random().toString(36).slice(2, 6).toUpperCase(), sekolah: x.sekolah, nama: x.nama, link: x.sumber === 'internal' ? '' : normForm(x.link), batas: Math.max(1, x.batas | 0), durasi: Math.max(1, x.durasi | 0), status: x.status, mulai: x.mulai || '', selesai: x.selesai || '', token, kelas: String(x.kelas || '').trim(), sumber: x.sumber === 'internal' ? 'internal' : 'form', opsiUjian: parseOpsiUjian_(x.opsiUjian) };
+      const rec = { id: x.id || 'UJ-' + Math.random().toString(36).slice(2, 6).toUpperCase(), sekolah: x.sekolah, nama: x.nama, link: normForm(x.link), batas: Math.max(1, x.batas | 0), durasi: Math.max(1, x.durasi | 0), status: x.status, mulai: x.mulai || '', selesai: x.selesai || '', token, kelas: String(x.kelas || '').trim() };
       const i = D.exams.findIndex(e => e.id === rec.id); i >= 0 ? D.exams[i] = rec : D.exams.push(rec); dsave(); return { id: rec.id, exams: D.exams.map(dFull) }; }
-    case 'adminGetSoal': { admin(); needExam(p.idUjian); return soalPay(p.idUjian); }
-    case 'adminSaveSoal': { admin(); needExam(p.idUjian); const c = cleanSoal_(p.soal || {}); let id = str_((p.soal || {}).id); D.soal = D.soal || [];
-      const ex = D.soal.find(q => q.id === id); if (ex && ex.idUjian !== p.idUjian) throw new Error('ID soal sudah dipakai.');
-      if (!id) id = 'Q-' + Math.random().toString(36).slice(2, 6).toUpperCase();
-      const rec = { idUjian: p.idUjian, id, urut: ex ? ex.urut : Math.max(0, ...D.soal.filter(q => q.idUjian === p.idUjian).map(q => q.urut)) + 1, ...c };
-      if (ex) Object.assign(ex, rec); else D.soal.push(rec); dsave(); return { id, ...soalPay(p.idUjian) }; }
-    case 'adminDeleteSoal': admin(); D.soal = (D.soal || []).filter(q => !(q.id === p.id && q.idUjian === p.idUjian)); dsave(); return soalPay(p.idUjian);
-    case 'adminReorderSoal': { admin(); const order = p.ids || [];
-      (D.soal || []).filter(q => q.idUjian === p.idUjian).sort((a, b) => { const x = order.indexOf(a.id), y = order.indexOf(b.id); return (x < 0 ? 1e6 + a.urut : x) - (y < 0 ? 1e6 + b.urut : y); }).forEach((q, i) => { q.urut = i + 1; });
-      dsave(); return soalPay(p.idUjian); }
-    case 'adminUploadImage': { admin();
-      if (!['image/jpeg', 'image/png', 'image/webp'].includes(p.mime)) throw new Error('Format gambar harus JPG, PNG, atau WebP.');
-      if (!/^[A-Za-z0-9+\/=]+$/.test(p.data || '')) throw new Error('Data gambar tidak valid.');
-      if (p.data.length > 420000) throw new Error('Gambar terlalu besar. Perkecil gambar lalu coba lagi.');
-      D.img = D.img || {}; const id = 'IMG-' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 6).toUpperCase();
-      D.img[id] = 'data:' + p.mime + ';base64,' + p.data; dsave(); return { id }; }
-    case 'getImages': { const o = {}; (p.ids || []).forEach(id => { if ((D.img || {})[id]) o[id] = D.img[id]; }); return { images: o }; }
-    case 'saveAnswers': { const s = sUser(), e = needExam(p.idUjian), l = log(e.id, s.nomor); if (!l) throw new Error('Sesi ujian tidak ditemukan.');
-      const st = state(l, e); if (e.sumber !== 'internal' || st.status !== 'Sedang Mengerjakan' || st.remainingSec <= 0) return { status: st.status, disimpan: false };
-      const j = ensureJ(e.id, s), soal = soalOf(e.id), json = JSON.stringify(cleanAnswers_(soal, p.jawaban));
-      if (json.length > 45000) throw new Error('Jawaban terlalu panjang. Persingkat jawaban essay.');
-      j.jawaban = JSON.parse(json); j.ragu = (p.ragu || []).filter(id => soal.some(q => q.id === id)); dsave(); return { status: st.status, disimpan: true }; }
-    case 'adminGetHasil': { admin(); const e = needExam(p.idUjian), soal = soalOf(e.id), stat = {};
-      soal.forEach(q => { stat[q.id] = { benar: 0, sebagian: 0, salah: 0, kosong: 0, menunggu: 0, dinilai: 0, n: 0 }; });
-      const rows = (D.jawab || []).filter(j => j.idUjian === e.id).map(j => { const h = hitung_(soal, j.jawaban, j.essay), lg = log(e.id, j.nomor);
-        h.detail.forEach(d => { const t = stat[d.id]; if (t) { t.n++; if (t[d.status] !== undefined) t[d.status]++; } });
-        return { nomor: j.nomor, nama: j.nama, kelas: j.kelas, sekolah: j.sekolah, status: lg ? lg.status : '-', pelanggaran: lg ? lg.pelanggaran : 0, auto: h.auto, essay: h.essay, belum: h.belum, total: h.total, maks: h.maks, nilai: h.nilai, poinSoal: h.detail.map(d => d.poin) }; });
-      return { ujian: { id: e.id, nama: e.nama }, soal: soal.map((q, i) => ({ id: q.id, no: i + 1, jenis: q.jenis, teks: q.teks.slice(0, 160), bobot: q.bobot, stat: stat[q.id] })), rows }; }
-    case 'adminGetJawaban': { admin(); const e = needExam(p.idUjian), soal = soalOf(e.id), j = findJ(e.id, String(p.nomor)); if (!j) throw new Error('Jawaban peserta tidak ditemukan.');
-      const h = hitung_(soal, j.jawaban, j.essay);
-      return { peserta: { nomor: j.nomor, nama: j.nama, kelas: j.kelas }, ringkas: { auto: h.auto, essay: h.essay, total: h.total, maks: h.maks, nilai: h.nilai, belum: h.belum },
-        detail: soal.map((q, i) => ({ no: i + 1, id: q.id, jenis: q.jenis, teks: q.teks, gambar: q.gambar, opsi: q.opsi, kunci: q.kunci, aturan: q.aturan, bobot: q.bobot,
-          jawaban: j.jawaban[q.id] === undefined ? null : j.jawaban[q.id], poin: h.detail[i].poin, status: h.detail[i].status, skorEssay: j.essay[q.id] === undefined ? null : j.essay[q.id] })) }; }
-    case 'adminNilaiEssay': { admin(); const e = needExam(p.idUjian), soal = soalOf(e.id), j = findJ(e.id, String(p.nomor)); if (!j) throw new Error('Jawaban peserta tidak ditemukan.');
-      Object.keys(p.skor || {}).forEach(qid => { const q = soal.find(x => x.id === qid); if (!q || q.jenis !== 'ESSAY') throw new Error('Soal essay tidak ditemukan.');
-        const v = p.skor[qid]; if (v === '' || v === null) { delete j.essay[qid]; return; }
-        const n = Number(v); if (isNaN(n) || n < 0 || n > q.bobot) throw new Error('Skor essay harus antara 0 dan ' + q.bobot + '.'); j.essay[qid] = Math.round(n * 100) / 100; });
-      dsave(); const h = hitung_(soal, j.jawaban, j.essay); return { ringkas: { auto: h.auto, essay: h.essay, total: h.total, maks: h.maks, nilai: h.nilai, belum: h.belum } }; }
     case 'adminDeleteExam': admin(); D.exams = D.exams.filter(e => e.id !== p.id); dsave(); return { exams: D.exams.map(dFull) };
     case 'adminGetLogs': admin(); return { logs: D.logs.filter(l => !p.idUjian || l.idUjian === p.idUjian).map(l => ({ ...l, online: Date.now() - l.seen < 30000, seenAgo: Math.round((Date.now() - l.seen) / 1000), sisaSec: l.status === 'Sedang Mengerjakan' ? rem(l, exam(l.idUjian) || {}) : null, tambahan: l.extra || 0 })) };
     case 'adminAddTime': { admin(); const l = log(p.idUjian, p.nomor), e = l && exam(l.idUjian); if (!l || !e) throw new Error('Data peserta tidak ditemukan.');
@@ -1798,6 +1026,7 @@ function demoRun(a, p) {
   }
   throw new Error('Aksi tidak dikenal');
 }
+
 /* ---------------------------- start ---------------------------- */
 (async function init() {
   checkConn();
